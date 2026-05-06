@@ -2,7 +2,8 @@
 # Silent install wrapper for RSUSetupWSF26001.exe
 
 $ExeName   = "RSUSetupWSF26001.exe"
-$ExePath   = Join-Path $PSScriptRoot $ExeName
+$ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { $PWD.Path }
+$ExePath   = Join-Path $ScriptDir $ExeName
 $LogDir    = "C:\Logs"
 $LogFile   = "$LogDir\RSU_Install.log"
 $ExtractDir = "$env:TEMP\RSU_Extract"
