@@ -10,7 +10,7 @@ Add-Type -AssemblyName UIAutomationTypes
 
 $LogDir  = "C:\Logs"
 $LogFile = "$LogDir\RSU_Install.log"
-$WinTitle = "Right-Suite"   # partial match — handles ® encoding differences
+$WinTitle = "Right-Suite"   # partial match - handles (R) encoding differences
 
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }
 
@@ -116,7 +116,7 @@ function Click-Finish {
     return $false
 }
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# -- Main ---------------------------------------------------------------------
 
 if (-not (Test-Path $ExePath)) {
     Write-Log "ERROR: Installer not found at $ExePath"
@@ -135,7 +135,7 @@ Write-Log "Installer window found: $($win.Current.Name)"
 
 Start-Sleep -Seconds 1
 
-# Screen 1 — License Agreement
+# Screen 1 -License Agreement
 Write-Log "Screen 1: Accepting license agreement"
 Click-Named $win "I ACCEPT the terms of this License Agreement" | Out-Null
 Start-Sleep -Milliseconds 500
@@ -143,7 +143,7 @@ Click-Next $win | Out-Null
 
 Start-Sleep -Seconds 1
 
-# Screen 2 — Installation Configuration (Standalone already selected)
+# Screen 2 -Installation Configuration (Standalone already selected)
 Write-Log "Screen 2: Selecting Standalone"
 Click-Named $win "Standalone" | Out-Null
 Start-Sleep -Milliseconds 300
@@ -151,7 +151,7 @@ Click-Next $win | Out-Null
 
 Start-Sleep -Seconds 1
 
-# Screen 3 — Availability (Anyone already selected)
+# Screen 3 -Availability (Anyone already selected)
 Write-Log "Screen 3: Selecting Anyone"
 Click-Named $win "Anyone" | Out-Null
 Start-Sleep -Milliseconds 300
@@ -159,7 +159,7 @@ Click-Next $win | Out-Null
 
 Start-Sleep -Seconds 1
 
-# Screen 4 — Installation type (Typical already selected)
+# Screen 4 -Installation type (Typical already selected)
 Write-Log "Screen 4: Selecting Typical"
 Click-Named $win "Typical" | Out-Null
 Start-Sleep -Milliseconds 300
@@ -167,13 +167,13 @@ Click-Next $win | Out-Null
 
 Start-Sleep -Seconds 1
 
-# Screen 5 — Install Folders (accept defaults)
+# Screen 5 -Install Folders (accept defaults)
 Write-Log "Screen 5: Accepting default install folders"
 Click-Next $win | Out-Null
 
 Start-Sleep -Seconds 1
 
-# Screen 6 — Likely a confirmation / Begin Install screen
+# Screen 6 -Likely a confirmation / Begin Install screen
 Write-Log "Screen 6: Starting installation"
 $installBtn = Find-DescendantLike $win "Install"
 if ($installBtn) {
@@ -192,7 +192,7 @@ while ((Get-Date) -lt $deadline) {
     # Re-acquire window reference (it may have changed)
     $win = Wait-InstallerWindow -TimeoutSec 5
     if (-not $win) {
-        Write-Log "Installer window closed — install likely complete"
+        Write-Log "Installer window closed -install likely complete"
         $finished = $true
         break
     }
@@ -204,7 +204,7 @@ while ((Get-Date) -lt $deadline) {
     # Handle any unexpected Next buttons that may appear
     $nextEl = Find-DescendantLike $win "Next"
     if ($nextEl) {
-        Write-Log "Unexpected Next button found — clicking"
+        Write-Log "Unexpected Next button found -clicking"
         Invoke-Element $nextEl | Out-Null
     }
 }
