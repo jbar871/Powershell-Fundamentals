@@ -77,8 +77,10 @@ try {
 # ── Interactive Install ───────────────────────────────────────────────────────
 if (-not $Install) { return }
 
-# Pick selection method: Out-GridView only works in a GUI/interactive session
-$useGridView = (-not $isRemote) -and (Get-Command Out-GridView -ErrorAction SilentlyContinue)
+# Out-GridView needs a local GUI session — not available inside Enter-PSSession
+$useGridView = (-not $isRemote) -and
+               ($Host.Name -ne 'ServerRemoteHost') -and
+               (Get-Command Out-GridView -ErrorAction SilentlyContinue)
 
 if ($useGridView) {
     $selected = $results | Out-GridView -Title "Select application(s) to install — hold Ctrl for multi-select" -PassThru
