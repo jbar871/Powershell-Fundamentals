@@ -89,7 +89,7 @@ if ($useGridView) {
     $indexed = $results | ForEach-Object { [PSCustomObject]@{ '#' = $i++; App = $_ } }
     $indexed | ForEach-Object { Write-Host "  $($_.'#')  $($_.App.Name)  $($_.App.Version)" }
     $raw = Read-Host "Selection"
-    if ($raw -eq '0' -or [string]::IsNullOrWhiteSpace($raw)) { exit 0 }
+    if ($raw -eq '0' -or [string]::IsNullOrWhiteSpace($raw)) { return }
     $chosen = $raw -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^\d+$' }
     $selected = $indexed | Where-Object { $_.'#' -in $chosen } | ForEach-Object { $_.App }
 }
