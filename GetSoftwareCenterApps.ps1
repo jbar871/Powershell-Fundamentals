@@ -30,7 +30,7 @@ try {
     $apps = Get-CimInstance @cimParams -ErrorAction Stop
 } catch {
     Write-Warning "Could not query Software Center applications on ${ComputerName}: $_"
-    exit 1
+    return
 }
 
 # InstallState: 0=NotInstalled 1=Unknown 2=Error 3=Installed 4=NotEvaluated 5=NotUpdated 6=Obsolete
@@ -50,7 +50,7 @@ $results = $apps | Where-Object {
 
 if (-not $results) {
     Write-Host "No available applications found for this user/machine in Software Center." -ForegroundColor Yellow
-    exit 0
+    return
 }
 
 $results | Format-Table -AutoSize
@@ -75,7 +75,7 @@ try {
 } catch { <# CCM_Program absent on some client versions #> }
 
 # ── Interactive Install ───────────────────────────────────────────────────────
-if (-not $Install) { exit 0 }
+if (-not $Install) { return }
 
 # Pick selection method: Out-GridView only works in a GUI/interactive session
 $useGridView = (-not $isRemote) -and (Get-Command Out-GridView -ErrorAction SilentlyContinue)
@@ -94,7 +94,7 @@ if ($useGridView) {
     $selected = $indexed | Where-Object { $_.'#' -in $chosen } | ForEach-Object { $_.App }
 }
 
-if (-not $selected) { Write-Host "No selection made. Exiting." -ForegroundColor Yellow; exit 0 }
+if (-not $selected) { Write-Host "No selection made. Exiting." -ForegroundColor Yellow; return }
 
 foreach ($pick in $selected) {
     # Match back to the raw CCM_Application instance to get Id/Revision/IsMachineTarget
