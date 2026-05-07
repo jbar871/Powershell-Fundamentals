@@ -115,12 +115,11 @@ foreach ($pick in $selected) {
         if ($isRemote) { $installParams['ComputerName'] = $ComputerName }
 
         Invoke-CimMethod @installParams -MethodName Install -Arguments @{
-            Id              = $appObj.Id
-            Revision        = $appObj.Revision
-            IsMachineTarget = [bool]$appObj.IsMachineTarget
-            EnforcePreference = [uint32]0   # 0 = Immediate
-            Priority        = 'High'
-            IsReboot        = $false
+            Id                = $appObj.Id
+            Revision          = $appObj.Revision
+            IsMachineTarget   = [bool]$appObj.IsMachineTarget
+            EnforcePreference = [uint32]0
+            Priority          = 'High'
         } | Out-Null
 
         Write-Host "  Install triggered. Monitor: C:\Windows\CCM\Logs\AppEnforce.log" -ForegroundColor Green
