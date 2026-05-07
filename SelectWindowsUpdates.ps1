@@ -5,20 +5,36 @@ function Search-AvailableUpdates {
 
     $session  = New-Object -ComObject Microsoft.Update.Session
     $searcher = $session.CreateUpdateSearcher()
+    $searcher.Online = $true   # force live check, skip local cache
 
-    # IsInstalled=0 returns both required and optional software updates
-    try {
-        $result = $searcher.Search("IsInstalled=0 and Type='Software'")
-    } catch {
-        Write-Host "Update search failed: $_" -ForegroundColor Red
-        return $null
+    $allUpdates = [System.Collections.Generic.List[object]]::new()
+
+    foreach ($query in @("IsInstalled=0 and Type='Software'", "IsInstalled=0 and Type='Driver'")) {
+        try {
+            $result = $searcher.Search($query)
+            foreach ($u in $result.Updates) { $allUpdates.Add($u) }
+        } catch {
+            Write-Host "Search failed for query '$query': $_" -ForegroundColor Yellow
+        }
     }
 
-    return $result.Updates
+    # Deduplicate by update identity
+    $seen = @{}
+    $unique = [System.Collections.Generic.List[object]]::new()
+    foreach ($u in $allUpdates) {
+        $id = $u.Identity.UpdateID
+        if (-not $seen.ContainsKey($id)) {
+            $seen[$id] = $true
+            $unique.Add($u)
+        }
+    }
+
+    Write-Host "Online search complete. Found $($unique.Count) update(s)." -ForegroundColor Cyan
+    return $unique
 }
 
 function Show-UpdateList {
-    param([__ComObject]$Updates)
+    param([object]$Updates)
 
     $required = [System.Collections.Generic.List[object]]::new()
     $optional = [System.Collections.Generic.List[object]]::new()
