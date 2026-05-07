@@ -1,63 +1,70 @@
 <#
 .SYNOPSIS
-    Lists all applications available to the current user in Software Center,
-    including install state and whether it is user-targeted or machine-targeted.
+    Lists all applications available to the current user in Software Center.
+    Optionally presents an interactive picker to install a selected application.
 
 .PARAMETER ComputerName
-    Remote computer to query. Defaults to localhost.
+    Remote computer to query/install on. Defaults to localhost.
 
 .PARAMETER ShowAll
     Include already-installed applications in the output (default: available only).
+
+.PARAMETER Install
+    After listing, open a selection menu so you can pick one or more apps to install.
+    Uses Out-GridView (GUI) when available; falls back to a numbered console menu.
 #>
 
 param(
     [string]$ComputerName = $env:COMPUTERNAME,
-    [switch]$ShowAll
+    [switch]$ShowAll,
+    [switch]$Install
 )
 
+$isRemote = $ComputerName -ne $env:COMPUTERNAME
+
+# ── Query Applications ────────────────────────────────────────────────────────
 $cimParams = @{ Namespace = 'root\ccm\clientSDK'; ClassName = 'CCM_Application' }
-if ($ComputerName -ne $env:COMPUTERNAME) {
-    $cimParams['ComputerName'] = $ComputerName
-}
+if ($isRemote) { $cimParams['ComputerName'] = $ComputerName }
 
 try {
     $apps = Get-CimInstance @cimParams -ErrorAction Stop
 } catch {
-    Write-Warning "Could not query Software Center applications on $ComputerName`: $_"
+    Write-Warning "Could not query Software Center applications on ${ComputerName}: $_"
     exit 1
 }
 
-# InstallState values: NotInstalled=0, Unknown=1, Error=2, Installed=3, NotEvaluated=4, NotUpdated=5, Obsoleted=6
+# InstallState: 0=NotInstalled 1=Unknown 2=Error 3=Installed 4=NotEvaluated 5=NotUpdated 6=Obsolete
 $stateMap = @{ 0='Not Installed'; 1='Unknown'; 2='Error'; 3='Installed'; 4='Not Evaluated'; 5='Not Updated'; 6='Obsolete' }
 
 $results = $apps | Where-Object {
     $ShowAll -or $_.InstallState -ne 3
 } | Select-Object `
     Name,
-    @{ N='Version';       E={ $_.SoftwareVersion } },
-    @{ N='Publisher';     E={ $_.Publisher } },
-    @{ N='InstallState';  E={ $stateMap[[int]$_.InstallState] } },
-    @{ N='Deadline';      E={ if ($_.Deadline) { [datetime]$_.Deadline } else { 'None' } } },
-    @{ N='UserTargeted';  E={ $_.UserUI } },
-    @{ N='HighImpact';    E={ $_.HighImpact } } |
+    @{ N='Version';      E={ $_.SoftwareVersion } },
+    @{ N='Publisher';    E={ $_.Publisher } },
+    @{ N='InstallState'; E={ $stateMap[[int]$_.InstallState] } },
+    @{ N='Deadline';     E={ if ($_.Deadline) { [datetime]$_.Deadline } else { 'None' } } },
+    @{ N='UserTargeted'; E={ $_.UserUI } },
+    @{ N='HighImpact';   E={ $_.HighImpact } } |
     Sort-Object InstallState, Name
 
 if (-not $results) {
     Write-Host "No available applications found for this user/machine in Software Center." -ForegroundColor Yellow
-} else {
-    $results | Format-Table -AutoSize
-    Write-Host "Total: $($results.Count) application(s)" -ForegroundColor Cyan
+    exit 0
 }
 
-# Also show available legacy packages/programs
+$results | Format-Table -AutoSize
+Write-Host "Total: $($results.Count) application(s)" -ForegroundColor Cyan
+
+# ── Legacy Packages / Programs ────────────────────────────────────────────────
 try {
     $pkgParams = @{ Namespace = 'root\ccm\clientSDK'; ClassName = 'CCM_Program' }
-    if ($ComputerName -ne $env:COMPUTERNAME) { $pkgParams['ComputerName'] = $ComputerName }
+    if ($isRemote) { $pkgParams['ComputerName'] = $ComputerName }
 
     $programs = Get-CimInstance @pkgParams -ErrorAction Stop |
         Where-Object { $ShowAll -or $_.CurrentState -ne 'Succeeded' } |
         Select-Object PackageName, ProgramName,
-            @{ N='State'; E={ $_.CurrentState } },
+            @{ N='State';         E={ $_.CurrentState } },
             @{ N='LastRunStatus'; E={ $_.LastRunStatus } } |
         Sort-Object PackageName
 
@@ -65,6 +72,59 @@ try {
         Write-Host "`nLegacy Packages / Programs:" -ForegroundColor Cyan
         $programs | Format-Table -AutoSize
     }
-} catch {
-    # CCM_Program may not exist on all client versions; silently skip
+} catch { <# CCM_Program absent on some client versions #> }
+
+# ── Interactive Install ───────────────────────────────────────────────────────
+if (-not $Install) { exit 0 }
+
+# Pick selection method: Out-GridView only works in a GUI/interactive session
+$useGridView = (-not $isRemote) -and (Get-Command Out-GridView -ErrorAction SilentlyContinue)
+
+if ($useGridView) {
+    $selected = $results | Out-GridView -Title "Select application(s) to install — hold Ctrl for multi-select" -PassThru
+} else {
+    # Numbered console menu (works over remote sessions / no-GUI hosts)
+    Write-Host "`nEnter the number(s) to install (comma-separated), or 0 to cancel:" -ForegroundColor Cyan
+    $i = 1
+    $indexed = $results | ForEach-Object { [PSCustomObject]@{ '#' = $i++; App = $_ } }
+    $indexed | ForEach-Object { Write-Host "  $($_.'#')  $($_.App.Name)  $($_.App.Version)" }
+    $raw = Read-Host "Selection"
+    if ($raw -eq '0' -or [string]::IsNullOrWhiteSpace($raw)) { exit 0 }
+    $chosen = $raw -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^\d+$' }
+    $selected = $indexed | Where-Object { $_.'#' -in $chosen } | ForEach-Object { $_.App }
+}
+
+if (-not $selected) { Write-Host "No selection made. Exiting." -ForegroundColor Yellow; exit 0 }
+
+foreach ($pick in $selected) {
+    # Match back to the raw CCM_Application instance to get Id/Revision/IsMachineTarget
+    $appObj = $apps | Where-Object {
+        $_.Name -eq $pick.Name -and
+        ([string]$_.SoftwareVersion -eq [string]$pick.Version)
+    } | Select-Object -First 1
+
+    if (-not $appObj) {
+        Write-Warning "Could not find matching CCM_Application object for '$($pick.Name)'. Skipping."
+        continue
+    }
+
+    Write-Host "`nInstalling: $($appObj.Name) $($appObj.SoftwareVersion)..." -ForegroundColor Cyan
+
+    try {
+        $installParams = @{ Namespace = 'root\ccm\clientSDK'; ClassName = 'CCM_Application' }
+        if ($isRemote) { $installParams['ComputerName'] = $ComputerName }
+
+        Invoke-CimMethod @installParams -MethodName Install -Arguments @{
+            Id              = $appObj.Id
+            Revision        = $appObj.Revision
+            IsMachineTarget = [bool]$appObj.IsMachineTarget
+            EnforcePreference = [uint32]0   # 0 = Immediate
+            Priority        = 'High'
+            IsReboot        = $false
+        } | Out-Null
+
+        Write-Host "  Install triggered. Monitor: C:\Windows\CCM\Logs\AppEnforce.log" -ForegroundColor Green
+    } catch {
+        Write-Warning "  Install failed for '$($appObj.Name)': $_"
+    }
 }
