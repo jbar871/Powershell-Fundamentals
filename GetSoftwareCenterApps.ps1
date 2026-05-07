@@ -114,7 +114,7 @@ foreach ($pick in $selected) {
         $installParams = @{ Namespace = 'root\ccm\clientSDK'; ClassName = 'CCM_Application' }
         if ($isRemote) { $installParams['ComputerName'] = $ComputerName }
 
-        Invoke-CimMethod @installParams -MethodName Install -Arguments @{
+        Invoke-CimMethod @installParams -MethodName Install -ErrorAction Stop -Arguments @{
             Id                = $appObj.Id
             Revision          = $appObj.Revision
             IsMachineTarget   = [bool]$appObj.IsMachineTarget
@@ -125,5 +125,9 @@ foreach ($pick in $selected) {
         Write-Host "  Install triggered. Monitor: C:\Windows\CCM\Logs\AppEnforce.log" -ForegroundColor Green
     } catch {
         Write-Warning "  Install failed for '$($appObj.Name)': $_"
+        if ($_ -match '0x80070005|Access is denied') {
+            Write-Host "  Tip: For user-targeted apps run without 'Run as Administrator'." -ForegroundColor Yellow
+            Write-Host "       For machine-targeted apps run as SYSTEM: psexec -s powershell.exe" -ForegroundColor Yellow
+        }
     }
 }
