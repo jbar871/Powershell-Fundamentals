@@ -40,7 +40,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Continue'   # log errors but keep going
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# ---- helpers ------------------------------------------------------------------------------------------------------------------------------------
 
 function Write-Log {
     param([string]$Message, [ValidateSet('INFO','WARN','ERROR')]$Level = 'INFO')
@@ -71,11 +71,11 @@ function Copy-ItemSafe {
 
         if ($item.PSIsContainer) {
             # Use robocopy for directories:
-            #   /E   – include subdirectories (including empty ones)
-            #   /XJ  – skip junction points (avoids My Music / My Pictures loops in Documents)
-            #   /256 – bypass the 260-character MAX_PATH limit
-            #   /R:1 /W:1 – one retry, one-second wait between retries
-            #   /NFL /NDL /NJH /NJS /NC /NS – suppress per-file noise; errors still print
+            #   /E   - include subdirectories (including empty ones)
+            #   /XJ  - skip junction points (avoids My Music / My Pictures loops in Documents)
+            #   /256 - bypass the 260-character MAX_PATH limit
+            #   /R:1 /W:1 - one retry, one-second wait between retries
+            #   /NFL /NDL /NJH /NJS /NC /NS - suppress per-file noise; errors still print
             if (-not (Test-Path $Dest)) {
                 New-Item -ItemType Directory -Path $Dest -Force | Out-Null
             }
@@ -106,7 +106,7 @@ function Copy-ItemSafe {
 function Add-BrowserProfileTasks {
     param(
         [System.Collections.ArrayList]$Tasks,
-        [string]$ProfileDir,    # full path to a profile folder (Default, Profile 1, …)
+        [string]$ProfileDir,    # full path to a profile folder (Default, Profile 1, ...)
         [string]$DstBase,       # e.g. 'Chrome\Default' or 'Edge\Profile_1'
         [bool]$Passwords
     )
@@ -140,7 +140,7 @@ function Add-BrowserProfileTasks {
     }
 }
 
-# ── resolve source profile root ───────────────────────────────────────────────
+# ---- resolve source profile root --------------------------------------------------------------------------------------------
 
 $profileRoot = if ($SourceUser -eq $env:USERNAME) {
     $env:USERPROFILE
@@ -153,7 +153,7 @@ if (-not (Test-Path $profileRoot)) {
     exit 1
 }
 
-# ── set up destination & log ──────────────────────────────────────────────────
+# ---- set up destination & log ----------------------------------------------------------------------------------------------------
 
 New-Item -ItemType Directory -Path $Destination -Force | Out-Null
 $logFile = Join-Path $Destination "migration_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
@@ -163,11 +163,11 @@ Write-Log "=== Domain Migration: $SourceUser ==="
 Write-Log "Profile root : $profileRoot"
 Write-Log "Destination  : $Destination"
 
-# ── build copy task list ──────────────────────────────────────────────────────
+# ---- build copy task list ------------------------------------------------------------------------------------------------------------
 
 $copyTasks = [System.Collections.ArrayList]@()
 
-# ── Chrome bookmarks (all install variants) ───────────────────────────────────
+# ---- Chrome bookmarks (all install variants) --------------------------------------------------------------------
 
 $chromeVariants = @(
     @{ Path = 'AppData\Local\Google\Chrome\User Data';      Label = 'Chrome'       }
@@ -189,7 +189,7 @@ foreach ($variant in $chromeVariants) {
             -Passwords $IncludeChromePasswords.IsPresent
     }
 
-    # Numbered profiles (Profile 1, Profile 2, …)
+    # Numbered profiles (Profile 1, Profile 2, ...)
     Get-ChildItem -Path $base -Directory -Filter 'Profile *' -ErrorAction SilentlyContinue |
         ForEach-Object {
             $safeName = $_.Name -replace '\s', '_'
@@ -205,7 +205,7 @@ if ($IncludeChromePasswords) {
     Write-Log "These files are DPAPI-encrypted and only decryptable under the originating Windows account." WARN
 }
 
-# ── Microsoft Edge (Chromium) bookmarks ──────────────────────────────────────
+# ---- Microsoft Edge (Chromium) bookmarks ----------------------------------------------------------------------------
 
 $edgeBase = Join-Path $profileRoot 'AppData\Local\Microsoft\Edge\User Data'
 if (Test-Path $edgeBase) {
@@ -227,7 +227,7 @@ if (Test-Path $edgeBase) {
         }
 }
 
-# ── IE / Edge Legacy Favorites ────────────────────────────────────────────────
+# ---- IE / Edge Legacy Favorites ------------------------------------------------------------------------------------------------
 
 $null = $copyTasks.Add(@{
     Label   = 'IE / Edge Legacy Favorites'
@@ -236,7 +236,7 @@ $null = $copyTasks.Add(@{
     Recurse = $true
 })
 
-# ── Standard user folders ─────────────────────────────────────────────────────
+# ---- Standard user folders --------------------------------------------------------------------------------------------------------
 
 foreach ($folder in @('Desktop','Documents','Pictures','Downloads')) {
     $null = $copyTasks.Add(@{
@@ -261,7 +261,7 @@ $null = $copyTasks.Add(@{
     Recurse = $true
 })
 
-# ── interactive: OneDrive - ARS ───────────────────────────────────────────────
+# ---- interactive: OneDrive - ARS --------------------------------------------------------------------------------------------
 
 Write-Host ''
 Write-Host '-----------------------------------------------' -ForegroundColor Cyan
@@ -301,7 +301,7 @@ if ($odUser.Trim() -ne '') {
 
 Write-Host ''
 
-# ── execute copies ────────────────────────────────────────────────────────────
+# ---- execute copies ------------------------------------------------------------------------------------------------------------------------
 
 $total   = $copyTasks.Count
 $current = 0
@@ -321,7 +321,7 @@ foreach ($task in $copyTasks) {
 
 Write-Progress -Activity 'Migrating user data' -Completed
 
-# ── summary ───────────────────────────────────────────────────────────────────
+# ---- summary ------------------------------------------------------------------------------------------------------------------------------------
 
 $errorCount = (Select-String -Path $logFile -Pattern '\[ERROR\]').Count
 $warnCount  = (Select-String -Path $logFile -Pattern '\[WARN\]' ).Count
