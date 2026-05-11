@@ -4,9 +4,11 @@
     Migrates user profile data to a new domain destination.
 
 .DESCRIPTION
-    Copies Chrome bookmarks, Chrome saved passwords, and common user folders
-    (Desktop, Documents, Pictures, Downloads, AppData\Roaming, C:\Temp) to a
-    specified destination path. Intended for use during domain migrations.
+    Copies Chrome/Edge bookmarks, IE Favorites, Chrome saved passwords, and
+    common user folders (Desktop, Documents, Pictures, Downloads,
+    AppData\Roaming, C:\Temp) to a specified destination path.
+    Interactively asks whether to copy a user's OneDrive - ARS folder.
+    Intended for use during domain migrations.
 
 .PARAMETER SourceUser
     The username whose data is being migrated. Defaults to the current user.
@@ -53,35 +55,88 @@ function Write-Log {
 }
 
 function Copy-ItemSafe {
-    <#
-        Wraps Copy-Item so a failure on one file is logged without stopping the
-        rest of the copy. Returns the number of bytes copied (approximate).
-    #>
     param(
         [string]$Source,
-        [string]$Dest,
-        [switch]$Recurse
+        [string]$Dest,     # For FILES: the target folder to copy into.
+        [switch]$Recurse   # Ignored for files; always recurses for directories via robocopy.
     )
 
-    if (-not (Test-Path $Source)) {
+    if (-not (Test-Path -LiteralPath $Source)) {
         Write-Log "Source not found, skipping: $Source" WARN
         return
     }
 
     try {
-        $destDir = if ((Get-Item $Source).PSIsContainer) { $Dest } else { Split-Path $Dest }
-        if (-not (Test-Path $destDir)) {
-            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+        $item = Get-Item -LiteralPath $Source -Force -ErrorAction Stop
+
+        if ($item.PSIsContainer) {
+            # Use robocopy for directories:
+            #   /E   – include subdirectories (including empty ones)
+            #   /XJ  – skip junction points (avoids My Music / My Pictures loops in Documents)
+            #   /256 – bypass the 260-character MAX_PATH limit
+            #   /R:1 /W:1 – one retry, one-second wait between retries
+            #   /NFL /NDL /NJH /NJS /NC /NS – suppress per-file noise; errors still print
+            if (-not (Test-Path $Dest)) {
+                New-Item -ItemType Directory -Path $Dest -Force | Out-Null
+            }
+            $roboArgs = @($Source, $Dest, '/E', '/XJ', '/256', '/R:1', '/W:1',
+                          '/NFL', '/NDL', '/NJH', '/NJS', '/NC', '/NS')
+            & robocopy @roboArgs | Out-Null
+            # Robocopy exit codes 0-7 indicate success or partial success; 8+ are real errors.
+            if ($LASTEXITCODE -ge 8) {
+                Write-Log "Robocopy reported errors copying '$Source' (exit $LASTEXITCODE)" ERROR
+            } else {
+                Write-Log "Copied: $Source  ->  $Dest"
+            }
+        } else {
+            # $Dest is the folder the file should land in.
+            if (-not (Test-Path $Dest)) {
+                New-Item -ItemType Directory -Path $Dest -Force | Out-Null
+            }
+            Copy-Item -LiteralPath $Source -Destination $Dest -Force -ErrorAction Stop
+            Write-Log "Copied: $Source  ->  $Dest"
         }
-
-        $params = @{ Path = $Source; Destination = $Dest; Force = $true; ErrorAction = 'Stop' }
-        if ($Recurse) { $params['Recurse'] = $true }
-
-        Copy-Item @params
-        Write-Log "Copied: $Source  ->  $Dest"
     }
     catch {
         Write-Log "Failed to copy '$Source': $_" ERROR
+    }
+}
+
+# helper: add bookmark tasks for any Chrome/Edge-family profile folder
+function Add-BrowserProfileTasks {
+    param(
+        [System.Collections.ArrayList]$Tasks,
+        [string]$ProfileDir,    # full path to a profile folder (Default, Profile 1, …)
+        [string]$DstBase,       # e.g. 'Chrome\Default' or 'Edge\Profile_1'
+        [bool]$Passwords
+    )
+
+    $null = $Tasks.Add(@{
+        Label   = "Bookmarks ($DstBase)"
+        Src     = Join-Path $ProfileDir 'Bookmarks'
+        Dst     = $DstBase
+        Recurse = $false
+    })
+    $null = $Tasks.Add(@{
+        Label   = "Bookmarks.bak ($DstBase)"
+        Src     = Join-Path $ProfileDir 'Bookmarks.bak'
+        Dst     = $DstBase
+        Recurse = $false
+    })
+
+    if ($Passwords) {
+        $null = $Tasks.Add(@{
+            Label   = "Login Data ($DstBase)"
+            Src     = Join-Path $ProfileDir 'Login Data'
+            Dst     = $DstBase
+            Recurse = $false
+        })
+        $null = $Tasks.Add(@{
+            Label   = "Login Data For Account ($DstBase)"
+            Src     = Join-Path $ProfileDir 'Login Data For Account'
+            Dst     = $DstBase
+            Recurse = $false
+        })
     }
 }
 
@@ -108,106 +163,143 @@ Write-Log "=== Domain Migration: $SourceUser ==="
 Write-Log "Profile root : $profileRoot"
 Write-Log "Destination  : $Destination"
 
-# ── define what to copy ───────────────────────────────────────────────────────
+# ── build copy task list ──────────────────────────────────────────────────────
 
-$chromeBase = Join-Path $profileRoot 'AppData\Local\Google\Chrome\User Data'
+$copyTasks = [System.Collections.ArrayList]@()
 
-# Each entry: @{ Src = '...'; Dst = relative subfolder under $Destination; Recurse = $true/$false }
-$copyTasks = @(
+# ── Chrome bookmarks (all install variants) ───────────────────────────────────
 
-    # ── Chrome bookmarks (all profiles) ─────────────────────────────────────
-    @{
-        Label   = 'Chrome Bookmarks (Default)'
-        Src     = Join-Path $chromeBase 'Default\Bookmarks'
-        Dst     = 'Chrome\Default'
-        Recurse = $false
-    }
-    @{
-        Label   = 'Chrome Bookmarks Backup (Default)'
-        Src     = Join-Path $chromeBase 'Default\Bookmarks.bak'
-        Dst     = 'Chrome\Default'
-        Recurse = $false
-    }
-
-    # ── User folders ─────────────────────────────────────────────────────────
-    @{
-        Label   = 'Desktop'
-        Src     = Join-Path $profileRoot 'Desktop'
-        Dst     = 'UserFolders\Desktop'
-        Recurse = $true
-    }
-    @{
-        Label   = 'Documents'
-        Src     = Join-Path $profileRoot 'Documents'
-        Dst     = 'UserFolders\Documents'
-        Recurse = $true
-    }
-    @{
-        Label   = 'Pictures'
-        Src     = Join-Path $profileRoot 'Pictures'
-        Dst     = 'UserFolders\Pictures'
-        Recurse = $true
-    }
-    @{
-        Label   = 'Downloads'
-        Src     = Join-Path $profileRoot 'Downloads'
-        Dst     = 'UserFolders\Downloads'
-        Recurse = $true
-    }
-    @{
-        Label   = 'AppData\Roaming'
-        Src     = Join-Path $profileRoot 'AppData\Roaming'
-        Dst     = 'UserFolders\AppData_Roaming'
-        Recurse = $true
-    }
-
-    # ── C:\Temp (machine-level, not profile-scoped) ───────────────────────────
-    @{
-        Label   = 'C:\Temp'
-        Src     = 'C:\Temp'
-        Dst     = 'UserFolders\C_Temp'
-        Recurse = $true
-    }
+$chromeVariants = @(
+    @{ Path = 'AppData\Local\Google\Chrome\User Data';      Label = 'Chrome'       }
+    @{ Path = 'AppData\Local\Google\Chrome Beta\User Data'; Label = 'ChromeBeta'   }
+    @{ Path = 'AppData\Local\Google\Chrome SxS\User Data';  Label = 'ChromeCanary' }
 )
 
-# Optionally include Chrome saved-password database
+foreach ($variant in $chromeVariants) {
+    $base = Join-Path $profileRoot $variant.Path
+
+    if (-not (Test-Path $base)) { continue }
+
+    # Default profile
+    $defaultDir = Join-Path $base 'Default'
+    if (Test-Path $defaultDir) {
+        Add-BrowserProfileTasks -Tasks $copyTasks `
+            -ProfileDir $defaultDir `
+            -DstBase "$($variant.Label)\Default" `
+            -Passwords $IncludeChromePasswords.IsPresent
+    }
+
+    # Numbered profiles (Profile 1, Profile 2, …)
+    Get-ChildItem -Path $base -Directory -Filter 'Profile *' -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            $safeName = $_.Name -replace '\s', '_'
+            Add-BrowserProfileTasks -Tasks $copyTasks `
+                -ProfileDir $_.FullName `
+                -DstBase "$($variant.Label)\$safeName" `
+                -Passwords $IncludeChromePasswords.IsPresent
+        }
+}
+
 if ($IncludeChromePasswords) {
-    $copyTasks += @{
-        Label   = 'Chrome Login Data (passwords – DPAPI encrypted)'
-        Src     = Join-Path $chromeBase 'Default\Login Data'
-        Dst     = 'Chrome\Default'
-        Recurse = $false
-    }
-    $copyTasks += @{
-        Label   = 'Chrome Login Data For Account'
-        Src     = Join-Path $chromeBase 'Default\Login Data For Account'
-        Dst     = 'Chrome\Default'
-        Recurse = $false
-    }
     Write-Log "Chrome password files included per -IncludeChromePasswords flag." WARN
     Write-Log "These files are DPAPI-encrypted and only decryptable under the originating Windows account." WARN
 }
 
-# ── also pick up any additional numbered Chrome profiles (Profile 1, 2 …) ─────
+# ── Microsoft Edge (Chromium) bookmarks ──────────────────────────────────────
 
-$extraProfiles = Get-ChildItem -Path $chromeBase -Directory -Filter 'Profile *' -ErrorAction SilentlyContinue
-foreach ($ep in $extraProfiles) {
-    $safeName = $ep.Name -replace '\s','_'
-    $copyTasks += @{
-        Label   = "Chrome Bookmarks ($($ep.Name))"
-        Src     = Join-Path $ep.FullName 'Bookmarks'
-        Dst     = "Chrome\$safeName"
-        Recurse = $false
+$edgeBase = Join-Path $profileRoot 'AppData\Local\Microsoft\Edge\User Data'
+if (Test-Path $edgeBase) {
+    $edgeDefault = Join-Path $edgeBase 'Default'
+    if (Test-Path $edgeDefault) {
+        Add-BrowserProfileTasks -Tasks $copyTasks `
+            -ProfileDir $edgeDefault `
+            -DstBase 'Edge\Default' `
+            -Passwords $false
     }
-    if ($IncludeChromePasswords) {
-        $copyTasks += @{
-            Label   = "Chrome Login Data ($($ep.Name))"
-            Src     = Join-Path $ep.FullName 'Login Data'
-            Dst     = "Chrome\$safeName"
-            Recurse = $false
+
+    Get-ChildItem -Path $edgeBase -Directory -Filter 'Profile *' -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            $safeName = $_.Name -replace '\s', '_'
+            Add-BrowserProfileTasks -Tasks $copyTasks `
+                -ProfileDir $_.FullName `
+                -DstBase "Edge\$safeName" `
+                -Passwords $false
         }
-    }
 }
+
+# ── IE / Edge Legacy Favorites ────────────────────────────────────────────────
+
+$null = $copyTasks.Add(@{
+    Label   = 'IE / Edge Legacy Favorites'
+    Src     = Join-Path $profileRoot 'Favorites'
+    Dst     = 'UserFolders\Favorites'
+    Recurse = $true
+})
+
+# ── Standard user folders ─────────────────────────────────────────────────────
+
+foreach ($folder in @('Desktop','Documents','Pictures','Downloads')) {
+    $null = $copyTasks.Add(@{
+        Label   = $folder
+        Src     = Join-Path $profileRoot $folder
+        Dst     = "UserFolders\$folder"
+        Recurse = $true
+    })
+}
+
+$null = $copyTasks.Add(@{
+    Label   = 'AppData\Roaming'
+    Src     = Join-Path $profileRoot 'AppData\Roaming'
+    Dst     = 'UserFolders\AppData_Roaming'
+    Recurse = $true
+})
+
+$null = $copyTasks.Add(@{
+    Label   = 'C:\Temp'
+    Src     = 'C:\Temp'
+    Dst     = 'UserFolders\C_Temp'
+    Recurse = $true
+})
+
+# ── interactive: OneDrive - ARS ───────────────────────────────────────────────
+
+Write-Host ''
+Write-Host '-----------------------------------------------' -ForegroundColor Cyan
+Write-Host '  OneDrive - ARS' -ForegroundColor Cyan
+Write-Host '-----------------------------------------------' -ForegroundColor Cyan
+
+$odUser = Read-Host 'Enter the username for the OneDrive path  (C:\Users\<USERNAME>\OneDrive - ARS)  or press Enter to skip'
+
+if ($odUser.Trim() -ne '') {
+    $odPath = "C:\Users\$($odUser.Trim())\OneDrive - ARS"
+
+    if (Test-Path $odPath) {
+        Write-Host "Found: $odPath" -ForegroundColor Green
+
+        do {
+            $odChoice = (Read-Host 'Copy this OneDrive folder to the destination? (Y/N)').Trim().ToUpper()
+        } until ($odChoice -in 'Y','N')
+
+        if ($odChoice -eq 'Y') {
+            $null = $copyTasks.Add(@{
+                Label   = "OneDrive - ARS ($($odUser.Trim()))"
+                Src     = $odPath
+                Dst     = 'OneDrive_ARS'
+                Recurse = $true
+            })
+            Write-Log "OneDrive - ARS path queued: $odPath"
+        } else {
+            Write-Log "OneDrive - ARS copy skipped by user." WARN
+        }
+    } else {
+        Write-Host "Path not found: $odPath" -ForegroundColor Yellow
+        Write-Log "OneDrive - ARS path not found: $odPath" WARN
+    }
+} else {
+    Write-Log "OneDrive - ARS prompt skipped (no username entered)." WARN
+}
+
+Write-Host ''
 
 # ── execute copies ────────────────────────────────────────────────────────────
 
