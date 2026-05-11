@@ -31,7 +31,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$SourceUser    = $env:USERNAME,
+    [string]$SourceUser,
     [Parameter(Mandatory)]
     [string]$Destination,
     [switch]$IncludeChromePasswords
@@ -80,6 +80,8 @@ function Copy-ItemSafe {
                 New-Item -ItemType Directory -Path $Dest -Force | Out-Null
             }
             $roboArgs = @($Source, $Dest, '/E', '/XJ', '/256', '/R:1', '/W:1',
+                          '/XD', $Dest,   # exclude destination from source scan (prevents self-copy when dest is inside source)
+                          '/XA:H',        # skip hidden files (OneDrive lock files, OS temp files)
                           '/NFL', '/NDL', '/NJH', '/NJS', '/NC', '/NS')
             & robocopy @roboArgs | Out-Null
             # Robocopy exit codes 0-7 indicate success or partial success; 8+ are real errors.
@@ -137,6 +139,22 @@ function Add-BrowserProfileTasks {
             Dst     = $DstBase
             Recurse = $false
         })
+    }
+}
+
+# ---- ask which user to migrate --------------------------------------------------------------------------------------------------
+
+if ([string]::IsNullOrWhiteSpace($SourceUser)) {
+    Write-Host ''
+    Write-Host '-----------------------------------------------' -ForegroundColor Cyan
+    Write-Host '  Which user are you migrating?' -ForegroundColor Cyan
+    Write-Host '-----------------------------------------------' -ForegroundColor Cyan
+    Write-Host "Currently logged on as: $env:USERNAME"
+    Write-Host 'Enter the username whose profile should be copied (e.g. jsmith, not the admin account).'
+    $SourceUser = (Read-Host 'Username').Trim()
+    if ([string]::IsNullOrWhiteSpace($SourceUser)) {
+        Write-Error 'No username entered. Exiting.'
+        exit 1
     }
 }
 
