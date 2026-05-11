@@ -57,8 +57,8 @@ function Write-Log {
 function Copy-ItemSafe {
     param(
         [string]$Source,
-        [string]$Dest,     # For FILES: the target folder to copy into.
-        [switch]$Recurse   # Ignored for files; always recurses for directories via robocopy.
+        [string]$Dest,
+        [switch]$Recurse
     )
 
     if (-not (Test-Path -LiteralPath $Source)) {
@@ -70,28 +70,17 @@ function Copy-ItemSafe {
         $item = Get-Item -LiteralPath $Source -Force -ErrorAction Stop
 
         if ($item.PSIsContainer) {
-            # Use robocopy for directories:
-            #   /E   - include subdirectories (including empty ones)
-            #   /XJ  - skip junction points (avoids My Music / My Pictures loops in Documents)
-            #   /256 - bypass the 260-character MAX_PATH limit
-            #   /R:1 /W:1 - one retry, one-second wait between retries
-            #   /NFL /NDL /NJH /NJS /NC /NS - suppress per-file noise; errors still print
             if (-not (Test-Path $Dest)) {
                 New-Item -ItemType Directory -Path $Dest -Force | Out-Null
             }
-            $roboArgs = @($Source, $Dest, '/E', '/XJ', '/256', '/R:1', '/W:1',
-                          '/XD', $Dest,   # exclude destination from source scan (prevents self-copy when dest is inside source)
-                          '/XA:H',        # skip hidden files (OneDrive lock files, OS temp files)
-                          '/NFL', '/NDL', '/NJH', '/NJS', '/NC', '/NS')
-            & robocopy @roboArgs | Out-Null
-            # Robocopy exit codes 0-7 indicate success or partial success; 8+ are real errors.
+            # /E=subdirs /XJ=skip junctions /256=long paths /XD=exclude dest (no self-copy) /XA:H=skip hidden
+            robocopy $Source $Dest /E /XJ /256 /R:1 /W:1 /XD $Dest /XA:H /NFL /NDL /NJH /NJS /NC /NS | Out-Null
             if ($LASTEXITCODE -ge 8) {
-                Write-Log "Robocopy reported errors copying '$Source' (exit $LASTEXITCODE)" ERROR
+                Write-Log "Robocopy errors on '$Source' (exit $LASTEXITCODE)" ERROR
             } else {
                 Write-Log "Copied: $Source  ->  $Dest"
             }
         } else {
-            # $Dest is the folder the file should land in.
             if (-not (Test-Path $Dest)) {
                 New-Item -ItemType Directory -Path $Dest -Force | Out-Null
             }
