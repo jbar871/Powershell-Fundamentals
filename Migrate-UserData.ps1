@@ -29,7 +29,7 @@
 .EXAMPLE
     .\Migrate-UserData.ps1 -SourceUser "jdoe" -Destination "D:\Migration\jdoe" -IncludeChromePasswords
 #>
-[CmdletBinding(SupportsShouldProcess)]
+[CmdletBinding()]
 param(
     [string]$SourceUser    = $env:USERNAME,
     [Parameter(Mandatory)]
@@ -313,18 +313,15 @@ foreach ($task in $copyTasks) {
 
     Write-Log "[$current/$total] $($task.Label)"
     $destPath = Join-Path $Destination $task.Dst
-
-    if ($PSCmdlet.ShouldProcess($task.Src, "Copy to $destPath")) {
-        Copy-ItemSafe -Source $task.Src -Dest $destPath -Recurse:$task.Recurse
-    }
+    Copy-ItemSafe -Source $task.Src -Dest $destPath -Recurse:$task.Recurse
 }
 
 Write-Progress -Activity 'Migrating user data' -Completed
 
 # ---- summary ------------------------------------------------------------------------------------------------------------------------------------
 
-$errorCount = (Select-String -Path $logFile -Pattern '\[ERROR\]').Count
-$warnCount  = (Select-String -Path $logFile -Pattern '\[WARN\]' ).Count
+$errorCount = @(Select-String -Path $logFile -Pattern '\[ERROR\]').Count
+$warnCount  = @(Select-String -Path $logFile -Pattern '\[WARN\]' ).Count
 
 Write-Log "=== Migration complete. Errors: $errorCount  Warnings: $warnCount ==="
 Write-Log "Log file: $logFile"
