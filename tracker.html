@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>To-Do Tracker</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      color: #333;
+      padding: 30px 20px;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+      font-size: 1.8rem;
+      color: #2c3e50;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .form-card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      margin-bottom: 30px;
+    }
+
+    .form-card h2 {
+      margin-bottom: 16px;
+      font-size: 1rem;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .form-grid .full-width {
+      grid-column: 1 / -1;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      background: #fafafa;
+      transition: border 0.2s;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #4a90d9;
+      background: #fff;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-family: inherit;
+      transition: background 0.2s;
+    }
+
+    .btn-primary {
+      background: #4a90d9;
+      color: #fff;
+    }
+
+    .btn-primary:hover { background: #357abd; }
+
+    .btn-danger {
+      background: #e74c3c;
+      color: #fff;
+      padding: 6px 12px;
+      font-size: 0.85rem;
+    }
+
+    .btn-danger:hover { background: #c0392b; }
+
+    .btn-done {
+      background: #27ae60;
+      color: #fff;
+      padding: 6px 12px;
+      font-size: 0.85rem;
+    }
+
+    .btn-done:hover { background: #1e8449; }
+
+    .btn-undo {
+      background: #95a5a6;
+      color: #fff;
+      padding: 6px 12px;
+      font-size: 0.85rem;
+    }
+
+    .btn-undo:hover { background: #7f8c8d; }
+
+    .items-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .items-header h2 {
+      font-size: 1rem;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .filter-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .filter-row select {
+      width: auto;
+      padding: 6px 10px;
+      font-size: 0.85rem;
+    }
+
+    .item-card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 18px 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      margin-bottom: 14px;
+      border-left: 4px solid #4a90d9;
+      transition: opacity 0.2s;
+    }
+
+    .item-card.done {
+      border-left-color: #27ae60;
+      opacity: 0.7;
+    }
+
+    .item-card.done .item-title {
+      text-decoration: line-through;
+      color: #999;
+    }
+
+    .item-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .item-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 6px;
+    }
+
+    .item-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 0.85rem;
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .item-meta span { display: flex; align-items: center; gap: 4px; }
+
+    .item-notes {
+      font-size: 0.9rem;
+      color: #555;
+      background: #f7f9fb;
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-top: 8px;
+      white-space: pre-wrap;
+    }
+
+    .item-actions {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .item-date {
+      font-size: 0.78rem;
+      color: #aaa;
+      margin-top: 8px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+
+    .badge-open { background: #dbeafe; color: #1d4ed8; }
+    .badge-done { background: #dcfce7; color: #166534; }
+
+    .empty {
+      text-align: center;
+      color: #aaa;
+      padding: 40px;
+      font-size: 0.95rem;
+    }
+
+    .count {
+      font-size: 0.85rem;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>To-Do Tracker</h1>
+
+  <!-- Add Form -->
+  <div class="form-card">
+    <h2>Add New Item</h2>
+    <div class="form-grid">
+      <input type="text" id="taskTitle" placeholder="Task / Subject *" />
+      <input type="text" id="taskName" placeholder="Name" />
+      <input type="email" id="taskEmail" placeholder="Email" />
+      <input type="text" id="taskPriority" placeholder="Priority (e.g. High, Low)" />
+      <textarea id="taskNotes" class="full-width" placeholder="Notes"></textarea>
+      <div class="full-width" style="display:flex; justify-content:flex-end;">
+        <button class="btn btn-primary" onclick="addItem()">Add Item</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Items List -->
+  <div class="items-header">
+    <h2>Items <span class="count" id="countLabel"></span></h2>
+    <div class="filter-row">
+      <select id="filterStatus" onchange="renderItems()">
+        <option value="all">All</option>
+        <option value="open">Open</option>
+        <option value="done">Done</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="itemsList"></div>
+</div>
+
+<script>
+  let items = JSON.parse(localStorage.getItem('tracker_items') || '[]');
+
+  function save() {
+    localStorage.setItem('tracker_items', JSON.stringify(items));
+  }
+
+  function addItem() {
+    const title = document.getElementById('taskTitle').value.trim();
+    if (!title) { alert('Task / Subject is required.'); return; }
+
+    items.unshift({
+      id: Date.now(),
+      title,
+      name: document.getElementById('taskName').value.trim(),
+      email: document.getElementById('taskEmail').value.trim(),
+      priority: document.getElementById('taskPriority').value.trim(),
+      notes: document.getElementById('taskNotes').value.trim(),
+      done: false,
+      created: new Date().toLocaleString()
+    });
+
+    save();
+    renderItems();
+
+    ['taskTitle','taskName','taskEmail','taskPriority','taskNotes'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+  }
+
+  function toggleDone(id) {
+    const item = items.find(i => i.id === id);
+    if (item) { item.done = !item.done; save(); renderItems(); }
+  }
+
+  function deleteItem(id) {
+    if (!confirm('Delete this item?')) return;
+    items = items.filter(i => i.id !== id);
+    save();
+    renderItems();
+  }
+
+  function renderItems() {
+    const filter = document.getElementById('filterStatus').value;
+    const filtered = items.filter(i => {
+      if (filter === 'open') return !i.done;
+      if (filter === 'done') return i.done;
+      return true;
+    });
+
+    const open = items.filter(i => !i.done).length;
+    document.getElementById('countLabel').textContent =
+      `(${open} open, ${items.length - open} done)`;
+
+    const list = document.getElementById('itemsList');
+
+    if (filtered.length === 0) {
+      list.innerHTML = '<div class="empty">No items to show.</div>';
+      return;
+    }
+
+    list.innerHTML = filtered.map(item => `
+      <div class="item-card ${item.done ? 'done' : ''}">
+        <div class="item-top">
+          <div style="flex:1">
+            <div class="item-title">
+              ${esc(item.title)}
+              <span class="badge ${item.done ? 'badge-done' : 'badge-open'}">
+                ${item.done ? 'Done' : 'Open'}
+              </span>
+            </div>
+            <div class="item-meta">
+              ${item.name  ? `<span>&#128100; ${esc(item.name)}</span>` : ''}
+              ${item.email ? `<span>&#9993; <a href="mailto:${esc(item.email)}">${esc(item.email)}</a></span>` : ''}
+              ${item.priority ? `<span>&#9873; ${esc(item.priority)}</span>` : ''}
+            </div>
+            ${item.notes ? `<div class="item-notes">${esc(item.notes)}</div>` : ''}
+            <div class="item-date">Added: ${item.created}</div>
+          </div>
+          <div class="item-actions">
+            <button class="btn ${item.done ? 'btn-undo' : 'btn-done'}"
+              onclick="toggleDone(${item.id})">
+              ${item.done ? 'Undo' : 'Done'}
+            </button>
+            <button class="btn btn-danger" onclick="deleteItem(${item.id})">Delete</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function esc(str) {
+    return String(str)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  }
+
+  renderItems();
+</script>
+</body>
+</html>
