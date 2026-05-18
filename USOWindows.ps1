@@ -1,3 +1,9 @@
+# Must run as Administrator
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Error "This script must be run as Administrator."
+    exit 1
+}
+
 # Create a Windows Update session
 $Session = New-Object -ComObject Microsoft.Update.Session
 $Searcher = $Session.CreateUpdateSearcher()
@@ -13,8 +19,8 @@ $Results.Updates | ForEach-Object {
     }
 }
 
-# Find Windows 11 25H2 specifically
-$TargetUpdate = $Results.Updates | Where-Object { $_.Title -like "*25H2*" }
+# Find Windows 11 25H2 specifically — take first match only so Add() gets a single IUpdate object
+$TargetUpdate = $Results.Updates | Where-Object { $_.Title -like "*25H2*" } | Select-Object -First 1
 
 if (-not $TargetUpdate) {
     Write-Host "Windows 11 25H2 not found in available updates. Exiting."
@@ -26,6 +32,11 @@ Write-Host "Found update: $($TargetUpdate.Title)"
 # Build a collection with just the 25H2 update
 $UpdatesToInstall = New-Object -ComObject Microsoft.Update.UpdateColl
 $UpdatesToInstall.Add($TargetUpdate) | Out-Null
+
+if ($UpdatesToInstall.Count -eq 0) {
+    Write-Error "Failed to add update to collection."
+    exit 1
+}
 
 # Download
 Write-Host "Downloading..."
