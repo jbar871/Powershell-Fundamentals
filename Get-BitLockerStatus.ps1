@@ -5,7 +5,8 @@
 #        .\Get-BitLockerStatus.ps1 -ComputerName PC01,PC02,PC03
 
 param(
-    [string[]]$ComputerName = $env:COMPUTERNAME
+    [string[]]$ComputerName = $env:COMPUTERNAME,
+    [int]$TimeoutSeconds = 10
 )
 
 $queryBlock = {
@@ -35,7 +36,8 @@ foreach ($Computer in $ComputerName) {
         $results = if ($isLocal) {
             & $queryBlock
         } else {
-            Invoke-Command -ComputerName $Computer -ScriptBlock $queryBlock -ErrorAction Stop
+            $sessionOpt = New-PSSessionOption -OpenTimeout ($TimeoutSeconds * 1000) -OperationTimeout ($TimeoutSeconds * 1000)
+            Invoke-Command -ComputerName $Computer -ScriptBlock $queryBlock -SessionOption $sessionOpt -ErrorAction Stop
         }
 
         foreach ($item in $results) {
