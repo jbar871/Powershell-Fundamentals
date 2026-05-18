@@ -1,33 +1,27 @@
-# Requires the ActiveDirectory module (RSAT or AD DS role)
-# Run on a domain-joined machine or provide -Server to target a DC
-
 param(
     [Parameter(Mandatory)]
-    [string]$Identity   # samAccountName, UPN, DN, or display name
+    [string]$Identity
 )
 
-$properties = @(
-    'StreetAddress',
-    'City',
-    'State',
-    'PostalCode',
-    'Country',
-    'co'          # country display name (friendly text)
-)
+$searcher = [System.DirectoryServices.DirectorySearcher]::new()
+$searcher.Filter = "(samAccountName=$Identity)"
+$searcher.PropertiesToLoad.AddRange(@('cn','samAccountName','streetAddress','l','st','postalCode','co'))
 
-try {
-    $user = Get-ADUser -Identity $Identity -Properties $properties -ErrorAction Stop
-} catch {
-    Write-Error "User '$Identity' not found or AD module unavailable: $_"
+$result = $searcher.FindOne()
+
+if (-not $result) {
+    Write-Error "User '$Identity' not found in Active Directory."
     exit 1
 }
 
+$p = $result.Properties
+
 [PSCustomObject]@{
-    Name        = $user.Name
-    SamAccount  = $user.SamAccountName
-    Street      = $user.StreetAddress
-    City        = $user.City
-    State       = $user.State
-    PostalCode  = $user.PostalCode
-    Country     = $user.co          # human-readable country name
+    Name       = "$($p['cn'][0])"
+    SamAccount = "$($p['samAccountName'][0])"
+    Street     = "$($p['streetAddress'][0])"
+    City       = "$($p['l'][0])"
+    State      = "$($p['st'][0])"
+    PostalCode = "$($p['postalCode'][0])"
+    Country    = "$($p['co'][0])"
 }
