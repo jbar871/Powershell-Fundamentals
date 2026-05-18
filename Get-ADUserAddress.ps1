@@ -5,7 +5,7 @@ param(
 
 $searcher = [System.DirectoryServices.DirectorySearcher]::new()
 $searcher.Filter = "(samAccountName=$Identity)"
-$searcher.PropertiesToLoad.AddRange(@('cn','samAccountName','streetAddress','l','st','postalCode','co'))
+$searcher.PropertiesToLoad.AddRange(@('cn','samAccountName','streetAddress','l','st','postalCode','co','userAccountControl'))
 
 $result = $searcher.FindOne()
 
@@ -15,10 +15,12 @@ if (-not $result) {
 }
 
 $p = $result.Properties
+$disabled = ($p['userAccountControl'][0] -band 2) -ne 0
 
 [PSCustomObject]@{
     Name       = "$($p['cn'][0])"
     SamAccount = "$($p['samAccountName'][0])"
+    Disabled   = $disabled
     Street     = "$($p['streetAddress'][0])"
     City       = "$($p['l'][0])"
     State      = "$($p['st'][0])"
