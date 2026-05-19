@@ -458,11 +458,10 @@ function processFile(file) {
           return;
         }
 
-        // Seed state for new IDs only (preserves existing notes/done)
+        // Full overwrite — clear previous state and seed fresh from new data
+        state = {};
         newData.forEach(row => {
-          if (!state[row.id]) {
-            state[row.id] = { done: row.status === 'updated', notes: row.notes||'', status: row.status||'' };
-          }
+          state[row.id] = { done: row.status === 'updated', notes: row.notes||'', status: row.status||'' };
         });
 
         CURRENT_DATA = newData;
