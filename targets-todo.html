@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Targets To-Do Tracker</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
+
+  header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: white; padding: 20px 24px; display: flex; align-items: center;
+    justify-content: space-between; flex-wrap: wrap; gap: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  }
+  header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.5px; }
+  .header-stats { display: flex; gap: 16px; flex-wrap: wrap; }
+  .stat-pill {
+    background: rgba(255,255,255,0.12); border-radius: 20px;
+    padding: 4px 14px; font-size: 0.82rem; white-space: nowrap;
+  }
+  .stat-pill strong { font-size: 1rem; }
+
+  .controls {
+    background: white; padding: 16px 24px; display: flex;
+    gap: 12px; flex-wrap: wrap; align-items: center;
+    border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .controls label { font-size: 0.82rem; color: #64748b; font-weight: 600; white-space: nowrap; }
+  select, input[type=text] {
+    border: 1px solid #cbd5e1; border-radius: 8px; padding: 7px 12px;
+    font-size: 0.88rem; background: #f8fafc; color: #1e293b;
+    outline: none; transition: border-color 0.2s;
+  }
+  select:focus, input[type=text]:focus { border-color: #3b82f6; background: white; }
+  select { cursor: pointer; }
+  .control-group { display: flex; align-items: center; gap: 8px; }
+  #searchBox { min-width: 220px; }
+
+  .btn {
+    padding: 7px 16px; border-radius: 8px; border: none; cursor: pointer;
+    font-size: 0.85rem; font-weight: 600; transition: all 0.15s;
+  }
+  .btn-primary { background: #3b82f6; color: white; }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-success { background: #10b981; color: white; }
+  .btn-success:hover { background: #059669; }
+  .btn-sm { padding: 4px 10px; font-size: 0.78rem; border-radius: 6px; }
+  .btn-outline { background: transparent; border: 1px solid #cbd5e1; color: #475569; }
+  .btn-outline:hover { background: #f1f5f9; }
+
+  .progress-bar-wrap {
+    background: #e2e8f0; border-radius: 4px; height: 6px; width: 180px;
+  }
+  .progress-bar-fill {
+    background: linear-gradient(90deg, #10b981, #3b82f6);
+    height: 100%; border-radius: 4px; transition: width 0.4s ease;
+  }
+
+  .main { padding: 20px 24px; max-width: 1600px; margin: 0 auto; }
+
+  .branch-section { margin-bottom: 28px; }
+  .branch-header {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+    background: white; border-radius: 10px 10px 0 0; border: 1px solid #e2e8f0;
+    cursor: pointer; user-select: none;
+  }
+  .branch-header:hover { background: #f8fafc; }
+  .branch-title { font-weight: 700; font-size: 1rem; color: #1e293b; }
+  .branch-count { font-size: 0.8rem; color: #64748b; }
+  .branch-progress { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .branch-done-pct { font-size: 0.8rem; color: #10b981; font-weight: 700; }
+  .collapse-icon { color: #94a3b8; font-size: 0.9rem; transition: transform 0.2s; }
+  .collapsed .collapse-icon { transform: rotate(-90deg); }
+
+  .branch-table-wrap { border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 10px 10px; overflow: hidden; }
+  .branch-table-wrap.hidden { display: none; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+  thead th {
+    background: #f8fafc; padding: 9px 12px; text-align: left;
+    font-size: 0.78rem; font-weight: 700; color: #64748b; text-transform: uppercase;
+    letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; white-space: nowrap;
+  }
+  tbody tr { border-bottom: 1px solid #f1f5f9; transition: background 0.1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #f8fafc; }
+  tbody tr.done-row { background: #f0fdf4; }
+  tbody tr.done-row td { opacity: 0.7; }
+  td { padding: 8px 12px; vertical-align: middle; }
+
+  .done-check {
+    width: 18px; height: 18px; cursor: pointer; accent-color: #10b981;
+  }
+  .target-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 12px;
+    font-size: 0.75rem; font-weight: 700; white-space: nowrap;
+  }
+  .badge-replace  { background: #fee2e2; color: #dc2626; }
+  .badge-23h2     { background: #fef3c7; color: #d97706; }
+  .badge-cmg      { background: #dbeafe; color: #2563eb; }
+  .badge-encrypt  { background: #f3e8ff; color: #7c3aed; }
+
+  .asset-name { font-weight: 600; color: #1e293b; font-family: 'Courier New', monospace; font-size: 0.82rem; }
+  .asset-id   { color: #94a3b8; font-size: 0.75rem; }
+  .user-name  { font-weight: 500; }
+  .user-email { color: #64748b; font-size: 0.78rem; }
+  .ci-type { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 0.75rem; font-weight: 600; }
+  .ci-laptop  { background: #e0f2fe; color: #0284c7; }
+  .ci-desktop { background: #fce7f3; color: #be185d; }
+  .ci-other   { background: #f3f4f6; color: #6b7280; }
+
+  .notes-cell { position: relative; }
+  .note-display {
+    cursor: pointer; padding: 4px 8px; border-radius: 6px; min-height: 28px;
+    min-width: 120px; max-width: 260px; font-size: 0.82rem; color: #475569;
+    border: 1px solid transparent; transition: border-color 0.15s;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .note-display:hover { border-color: #cbd5e1; background: #f8fafc; }
+  .note-display.empty::before { content: 'Click to add note...'; color: #cbd5e1; font-style: italic; }
+  .note-edit-wrap { display: none; }
+  .note-edit-wrap.active { display: flex; gap: 4px; align-items: flex-start; }
+  .note-textarea {
+    border: 2px solid #3b82f6; border-radius: 6px; padding: 4px 8px;
+    font-size: 0.82rem; min-width: 180px; min-height: 60px; resize: vertical;
+    font-family: inherit; outline: none;
+  }
+  .note-actions { display: flex; flex-direction: column; gap: 4px; }
+
+  .status-select {
+    border: 1px solid #e2e8f0; border-radius: 6px; padding: 3px 6px;
+    font-size: 0.78rem; background: #f8fafc; cursor: pointer;
+  }
+
+  .no-results { text-align: center; padding: 60px; color: #94a3b8; font-size: 1rem; }
+
+  .save-indicator {
+    position: fixed; bottom: 20px; right: 20px;
+    background: #10b981; color: white; padding: 10px 18px;
+    border-radius: 10px; font-size: 0.85rem; font-weight: 600;
+    opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  .save-indicator.show { opacity: 1; }
+
+  @media (max-width: 768px) {
+    header { padding: 14px 16px; }
+    .controls { padding: 12px 16px; }
+    .main { padding: 14px 16px; }
+    thead th:nth-child(n+7) { display: none; }
+    td:nth-child(n+7) { display: none; }
+    #searchBox { min-width: 140px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>&#128203; Targets To-Do Tracker</h1>
+  <div class="header-stats">
+    <div class="stat-pill">Total: <strong id="statTotal">-</strong></div>
+    <div class="stat-pill">Done: <strong id="statDone">-</strong></div>
+    <div class="stat-pill">Remaining: <strong id="statRemaining">-</strong></div>
+    <div class="stat-pill" style="display:flex;align-items:center;gap:8px;">
+      <span id="statPct">0%</span>
+      <div class="progress-bar-wrap"><div class="progress-bar-fill" id="globalBar" style="width:0%"></div></div>
+    </div>
+  </div>
+</header>
+
+<div class="controls">
+  <div class="control-group">
+    <label for="branchFilter">Branch:</label>
+    <select id="branchFilter">
+      <option value="">All Branches</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label for="targetFilter">Target:</label>
+    <select id="targetFilter">
+      <option value="">All Targets</option>
+      <option value="2025 Replace">2025 Replace</option>
+      <option value="23H2 Update">23H2 Update</option>
+      <option value="CMG Version">CMG Version</option>
+      <option value="Not Encrypted">Not Encrypted</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label for="statusFilter">Status:</label>
+    <select id="statusFilter">
+      <option value="">All</option>
+      <option value="pending">Pending</option>
+      <option value="done">Done</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label for="searchBox">Search:</label>
+    <input type="text" id="searchBox" placeholder="Asset, name, email...">
+  </div>
+  <button class="btn btn-outline" onclick="clearAllFilters()">Clear Filters</button>
+  <button class="btn btn-success" onclick="exportNotes()" style="margin-left:auto">&#128229; Export Notes</button>
+</div>
+
+<div class="main" id="mainContent">
+  <div class="no-results" id="noResults" style="display:none">No items match your filters.</div>
+</div>
+
+<div class="save-indicator" id="saveIndicator">Saved!</div>
+
+<script>
+const RAW_DATA = [{"target":"2025 Replace","status":"","notes":"Will check on 5/19","id":"Asset-17434","assetName":"L5CG1141M3B","ciType":"Laptop","product":"HP ZBook Firefly 14 inch G8 Mobile Workstation PC","location":"8299 - Houston Call Center","lastLoginBy":"ChBrooks","email":"chbrooks@ars.com","userName":"Cheyenne Brooks","jobTitle":"Cust Service Spc"},{"target":"2025 Replace","status":"","notes":"Hold","id":"Asset-19194","assetName":"L5CG1287JJC","ciType":"Laptop","product":"HP ZBook Firefly 14 inch G8 Mobile Workstation PC","location":"8378 - ARS of Illinois","lastLoginBy":"DAmir","email":"damir@ars.com","userName":"Dotan Amir","jobTitle":"HVAC Sales Manager"},{"target":"2025 Replace","status":"","notes":"Jessie to replace","id":"Asset-17178","assetName":"DMXL1503WPJ","ciType":"Desktop","product":"HP ProDesk 600 G6 Desktop Mini PC","location":"8551 - ARS of Laurel","lastLoginBy":"AFranklyn","email":"afranklyn@ars.com","userName":"Althia Franklyn","jobTitle":"Dispatcher"},{"target":"2025 Replace","status":"","notes":"Has replacement, need to login","id":"Asset-19118","assetName":"L5CG1195NWX","ciType":"Laptop","product":"HP EliteBook 850 G8 Notebook PC","location":"8554 - Blue Dot","lastLoginBy":"KDickinson","email":"kdickinson@bluedotmd.com","userName":"Kenneth Dickinson","jobTitle":"Division Safety Manager"},{"target":"2025 Replace","status":"","notes":"Ordering replacement","id":"Asset-18065","assetName":"L5CG2028TF8","ciType":"Laptop","product":"HP ZBook Firefly 14 inch G8 Mobile Workstation PC","location":"8876 - ARS of Raleigh","lastLoginBy":"JDepablos","email":"jdepablos@ars.com","userName":"Jose Depablos","jobTitle":"Inside Sales Rep"},{"target":"2025 Replace","status":"","notes":"Temporary/Replacement Coming","id":"Asset-18903","assetName":"L5CG14053SS","ciType":"Laptop","product":"HP ZBook Firefly 14 inch G8 Mobile Workstation PC","location":"8877 - ARS of Durham","lastLoginBy":"NCraven","email":"ncraven@ars.com","userName":"Nathanael Craven","jobTitle":"Sales Coordinator"},{"target":"2025 Replace","status":"","notes":"","id":"Asset-17186","assetName":"DMXL1462WVT","ciType":"Desktop","product":"HP ProDesk 600 G6 Desktop Mini PC","location":"9700 - ARS Corporate","lastLoginBy":"CrYoung","email":"cryoung@ars.com","userName":"Crystal Young","jobTitle":"Accounts Payable Spc"},{"target":"2025 Replace","status":"","notes":"","id":"Asset-19110","assetName":"DMXL0093XSY","ciType":"Desktop","product":"HP ProDesk 600 G5 SFF","location":"9700 - ARS Corporate","lastLoginBy":"ARSBadges","email":"ARSBadges@ars.com","userName":"","jobTitle":""},{"target":"2025 Replace","status":"","notes":"","id":"Asset-18906","assetName":"DMJ009UPW","ciType":"Desktop","product":"ThinkCentre M83","location":"9700 - ARS Corporate","lastLoginBy":"AvayaDataUser","email":"","userName":"","jobTitle":""},{"target":"2025 Replace","status":"","notes":"Sam to replace","id":"Asset-17236","assetName":"L5CG1476YLR","ciType":"Laptop","product":"HP ZBook Firefly 14 inch G8 Mobile Workstation PC","location":"9700 - Corporate","lastLoginBy":"SAlexander","email":"salexander@ars.com","userName":"Samuel Alexander","jobTitle":"Division Safety Manager"},{"target":"2025 Replace","status":"","notes":"Mario to ship","id":"Asset-19273","assetName":"L5CG0178CCZ","ciType":"Laptop","product":"HP EliteBook 840 G6","location":"9700 - Corporate","lastLoginBy":"CHernandezDiaz","email":"chernandezdiaz@theyesmancan.com","userName":"Carlos HernandezDiaz","jobTitle":"Recruiter"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-11682","assetName":"DMXL3312MFZ","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8107 - RR of San Diego","lastLoginBy":"ecortes","email":"ecortes@ars.com","userName":"Elias Cortes","jobTitle":"Warehouse Specialist"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-1498","assetName":"L5CG3040F7Q","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8120 - RighTime Riverside","lastLoginBy":"RAlcazar","email":"ralcazar@rightimeservices.com","userName":"Ronald Alcazar","jobTitle":"Install Supervisor"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2341","assetName":"L5CG2403YW2","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8130 - Beutler AC Services","lastLoginBy":"nmayes","email":"nmayes@beutler.com","userName":"Norma Mayes","jobTitle":"Accounting Supervisor"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2966","assetName":"L5CG3150MT1","ciType":"Laptop","product":"HP EliteBook 860 16 inch G9 Notebook PC","location":"8130 - Beutler AC Services","lastLoginBy":"LFrancecisco","email":"lfrancecisco@ars.com","userName":"Lara Francecisco","jobTitle":"Dispatcher"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2146","assetName":"L5CG3150ZRD","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8130 - Beutler AC Services","lastLoginBy":"spedrini","email":"spedrini@ars.com","userName":"Savannah Pedrini","jobTitle":"Scheduler"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-3266","assetName":"L2MQ43107CM","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"8130 - Beutler AC Services","lastLoginBy":"JKarl","email":"jkarl@beutler.com","userName":"Jonathan Karl","jobTitle":"Sales Coordinator"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-1771","assetName":"L5CG315106S","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8130 - Beutler AC Services","lastLoginBy":"DFranco","email":"dfranco@ars.com","userName":"Diane Franco","jobTitle":"Sales Coordinator"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-3075","assetName":"LC2L34200WJ","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"8130 - Beutler AC Services","lastLoginBy":"EWoolever","email":"ewoolever@ars.com","userName":"Esperanza Woolever","jobTitle":"Reg StrategicAlliance Mgr"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-10224","assetName":"L2MQ43107CF","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"8131 - Atlas Trillo","lastLoginBy":"SLepas","email":"slepas@atlastrillo.com","userName":"Steven Lepas","jobTitle":"HR Manager"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-12279","assetName":"L2MQ5091029","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"8153 - ARS of Colorado","lastLoginBy":"MKohle","email":"mkohle@ars.com","userName":"Matthew Kohle","jobTitle":"AOR Installation Supvr"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-1818","assetName":"L5CG315106V","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8153 - ARS of Colorado","lastLoginBy":"CMack","email":"cmack@ars.com","userName":"Carrie Mack","jobTitle":"Lowes Program Manager"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2508","assetName":"L5CG33904V9","ciType":"Laptop","product":"HP EliteBook 860 16 inch G10 Notebook PC","location":"8253 - ARS of Miami","lastLoginBy":"AQuintero","email":"aquintero@ars.com","userName":"Alfredo QuinteroChiu","jobTitle":"General Manager"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-1930","assetName":"L5CG3150MVF","ciType":"Laptop","product":"HP EliteBook 860 16 inch G9 Notebook PC","location":"8277 - Florida Home AC","lastLoginBy":"DScott","email":"dscott@floridahomeac.com","userName":"Destiny Scott","jobTitle":"Dispatcher"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-1931","assetName":"L5CG315105N","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8277 - Florida Home AC","lastLoginBy":"MySande","email":"mysande@floridahomeac.com","userName":"Myrhdyll Sande","jobTitle":"AOR Helper"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2421","assetName":"L5CG3150ZK6","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8281 - ARS of Orlando","lastLoginBy":"KHeyward","email":"kheyward@ars.com","userName":"Ketura Heyward","jobTitle":"Dispatcher"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-1901","assetName":"L5CG3150MV4","ciType":"Laptop","product":"HP EliteBook 860 16 inch G9 Notebook PC","location":"8281 - ARS of Orlando","lastLoginBy":"mprosper","email":"mprosper@ars.com","userName":"Michael Prosper","jobTitle":"Lowes Program Manager"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2312","assetName":"L5CG3150ZKH","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8302 - Allgood Home Services","lastLoginBy":"JWoody","email":"jwoody@ars.com","userName":"Joshua Woody","jobTitle":"Plumbing Service Manager"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2569","assetName":"L5CG3293CLJ","ciType":"Laptop","product":"HP Elite x360 1040 14 inch G10 2-in-1 Notebook PC","location":"8302 - Allgood Home Services","lastLoginBy":"CRowe","email":"crowe@ars.com","userName":"Christian Rowe","jobTitle":"Dispatcher"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2327","assetName":"L5CG3150ZK0","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8302 - Allgood Home Services","lastLoginBy":"CJSmith","email":"cjsmith@ars.com","userName":"Caelib Smith","jobTitle":"Dispatcher"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-17197","assetName":"L2MQ5280LGN","ciType":"Laptop","product":"HP EliteBook 860 16 inch G11 Notebook PC","location":"8404 - ARS of Indianapolis","lastLoginBy":"fSpaid","email":"fspaid@ars.com","userName":"Frank Spaid","jobTitle":"Warehouse Inventory Manager"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2354","assetName":"L5CG3150MTB","ciType":"Laptop","product":"HP EliteBook 860 16 inch G9 Notebook PC","location":"8404 - ARS of Indianapolis","lastLoginBy":"ARSKiosk","email":"jthornton@ars.com","userName":"Jayde Roe","jobTitle":"Dispatcher"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-12570","assetName":"DMXL5093R0B","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8425 - Hamilton","lastLoginBy":"8425DisplayUser","email":"8425displayuser@ars.com","userName":"8425DisplayUser User","jobTitle":""},{"target":"23H2 Update","status":"","notes":"","id":"Asset-9635","assetName":"L2MQ43107CC","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"8554 - Blue Dot","lastLoginBy":"tloney","email":"tloney@bluedotmd.com","userName":"Tamika Loney","jobTitle":"Quality Assurance Manager"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2000","assetName":"L5CG3150MSM","ciType":"Laptop","product":"HP EliteBook 860 16 inch G9 Notebook PC","location":"8554 - Blue Dot","lastLoginBy":"RStauffer","email":"rstauffer@ars.com","userName":"Rachel Stauffer","jobTitle":"Customer Care Coord"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2065","assetName":"L5CG3150MTQ","ciType":"Laptop","product":"HP EliteBook 860 16 inch G9 Notebook PC","location":"8603 - ARS of Detroit","lastLoginBy":"JLowes","email":"jlowes@ars.com","userName":"Jim Lowes","jobTitle":"Warehouse Helper"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-18920","assetName":"DMXL3192F6H","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8603 - ARS of Detroit","lastLoginBy":"BBrady","email":"bbrady@ars.com","userName":"Bowen Brady","jobTitle":"Sales Coordinator"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-13693","assetName":"L2MQ5070V4S","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"8876 - ARS of Raleigh","lastLoginBy":"AFranklin","email":"afranklin@ars.com","userName":"Aaron Franklin","jobTitle":"Weekly Plumb Repair Spec"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-1632","assetName":"L5CG3150MT2","ciType":"Laptop","product":"HP EliteBook 860 16 inch G9 Notebook PC","location":"8880 - ARS of Wilmington","lastLoginBy":"BHammett","email":"bhammett@ars.com","userName":"Brian Hammett","jobTitle":"Weekly Comfort Advisor"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2179","assetName":"L5CG3040FFD","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8927 - RR of Cleveland","lastLoginBy":"jdorsey","email":"jdorsey@ars.com","userName":"Jason Dorsey","jobTitle":"Weekly Commercial Acct Rp"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-3163","assetName":"L5CG3150ZRG","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8927 - RR of Cleveland","lastLoginBy":"JConti","email":"jconti@ars.com","userName":"John Conti","jobTitle":"Weekly Commercial Acct Rp"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-19498","assetName":"L2MQ5280JQP","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9055 - ARS of Myrtle Beach","lastLoginBy":"MSarrio","email":"msarrio@ars.com","userName":"Matthew Sarrio","jobTitle":"HVAC AOR Sales Rep"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-9940","assetName":"L2MQ44608VM","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9055 - ARS of Myrtle Beach","lastLoginBy":"BStanley","email":"bstanley@ars.com","userName":"Bradley Stanley","jobTitle":"Weekly Comfort Advisor"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2501","assetName":"L5CG3150ZL8","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9062 - Brother's","lastLoginBy":"MMetodiev","email":"mmetodiev@brotherair.com","userName":"Martin Metodiev","jobTitle":"Weekly Comfort Advisor"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2692","assetName":"L5CG3150ZDL","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9062 - Brother's","lastLoginBy":"JesLopez","email":"jeslopez@brotherair.com","userName":"Jessica Contreras","jobTitle":"Scheduler"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2141","assetName":"L5CG3151017","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9106 - Conway Services","lastLoginBy":"RMcDaniel","email":"rmcdaniel@conwayservices.net","userName":"Rikki McDaniel","jobTitle":"Scheduler"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-1604","assetName":"L5CG3151019","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9131 - ARS of Houston","lastLoginBy":"RMorris","email":"rmorris@ars.com","userName":"Raishawn Morris","jobTitle":"Safety Manager"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-1607","assetName":"L5CG315102B","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9131 - ARS of Houston","lastLoginBy":"EUribe","email":"euribe@ars.com","userName":"Estella Uribe","jobTitle":"HR Manager"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-1811","assetName":"L5CG315101N","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9133 - ARS of San Antonio","lastLoginBy":"BHilton","email":"bhilton@ars.com","userName":"Brooklynn Hilton","jobTitle":"Scheduler"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2844","assetName":"LC2L34200XC","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"9153 - Yes! Utah","lastLoginBy":"moyler","email":"moyler@theyesmancan.com","userName":"Matthew Oyler","jobTitle":"SM - Comfort Advisor"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2362","assetName":"L5CG3150ZF7","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9202 - McCarthy Services","lastLoginBy":"HGurung","email":"hgurung@mccarthyservice.com","userName":"Hemant Gurung","jobTitle":"Accounts Payable Clerk"},{"target":"23H2 Update","status":"","notes":"Check tomrrow","id":"Asset-12513","assetName":"L2MQ5070Y0N","ciType":"Laptop","product":"HP EliteBook 860 16 inch G11 Notebook PC","location":"9207 - Total Comfort","lastLoginBy":"KChisley","email":"kchisley@yourtotalcomfort.com","userName":"Keisy Chisley","jobTitle":"Dispatcher"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-12637","assetName":"L2MQ5090YWD","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9226 - RR of Seattle","lastLoginBy":"rtubbs","email":"rtubbs@ars.com","userName":"Ryan Tubbs","jobTitle":"Weekly Plumb Repair Spec"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-3133","assetName":"L2MQ43107BZ","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"9228 - Blue Flame Heating &Air","lastLoginBy":"SCGonzalez","email":"scgonzalez@ars.com","userName":"Sonia Gonzalez","jobTitle":"Dispatcher"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2751","assetName":"LC2L34200XF","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"9228 - Blue Flame Heating &Air","lastLoginBy":"CRChambers","email":"crchambers@blueflamecomfort.com","userName":"Conner Chambers","jobTitle":"AOR Installation Tech"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-12970","assetName":"L5CG3313H5G","ciType":"Laptop","product":"HP EliteBook 860 16 inch G10 Notebook PC","location":"9228 - Blue Flame Heating &Air","lastLoginBy":"BRuddell","email":"bruddell@ars.com","userName":"Bradley Ruddell","jobTitle":"AOR Installation Manager"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-15050","assetName":"L2MQ50804XS","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9700 - ARS Corporate","lastLoginBy":"rdarling","email":"rdarling@ars.com","userName":"Rob Darling","jobTitle":"Consultant"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-19201","assetName":"DMXL2385D9Z","ciType":"Desktop","product":"HP Z6 G4 Workstation","location":"9700 - Corporate","lastLoginBy":"rseelam","email":"rseelam@ars.com","userName":"Rami Seelam","jobTitle":"IT Dev Software Architect"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-2269","assetName":"L5CG3313B47","ciType":"Laptop","product":"HP EliteBook 1040 14 inch G10 Notebook PC","location":"9700 - Corporate","lastLoginBy":"SWChapman","email":"swchapman@ars.com","userName":"Steven Chapman","jobTitle":"Systems Engineer"},{"target":"23H2 Update","status":"","notes":"","id":"Asset-1621","assetName":"L5CG3040FG0","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9700 - Corporate","lastLoginBy":"MRodriguez","email":"mrodriguez@ars.com","userName":"Mario Rodriguez","jobTitle":"Field IT Analyst"},{"target":"CMG Version","status":"","notes":"","id":"Asset-3282","assetName":"L5CG3313H5H","ciType":"Laptop","product":"HP EliteBook 860 16 inch G10 Notebook PC","location":"8107 - RR of San Diego","lastLoginBy":"KBartell","email":"kbartell@ars.com","userName":"Kevin Bartell","jobTitle":"Lowes Program Manager"},{"target":"CMG Version","status":"","notes":"","id":"Asset-3338","assetName":"L5CG3313H60","ciType":"Laptop","product":"HP EliteBook 860 16 inch G10 Notebook PC","location":"8107 - RR of San Diego","lastLoginBy":"JMenard","email":"jmenard@ars.com","userName":"Jace Menard","jobTitle":"Operations Manager"},{"target":"CMG Version","status":"","notes":"","id":"Asset-9929","assetName":"L5CG3313H63","ciType":"Laptop","product":"HP EliteBook 860 16 inch G10 Notebook PC","location":"8120 - RighTime Riverside","lastLoginBy":"","email":"","userName":"","jobTitle":""},{"target":"CMG Version","status":"","notes":"","id":"Asset-2769","assetName":"LC2L34200XL","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"8120 - RighTime Riverside","lastLoginBy":"JValencia","email":"jvalencia@ars.com","userName":"Jose Valencia","jobTitle":"Plumbing Service Manager"},{"target":"CMG Version","status":"","notes":"","id":"Asset-10236","assetName":"L2MQ43107BT","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"8120 - RighTime Riverside","lastLoginBy":"CKerr","email":"ckerr@ars.com","userName":"Chad Kerr","jobTitle":"General Manager"},{"target":"CMG Version","status":"","notes":"","id":"Asset-1502","assetName":"DMXL30120DV","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8120 - RighTime Riverside","lastLoginBy":"8120display","email":"8120display@ars.com","userName":"8120 Display","jobTitle":""},{"target":"CMG Version","status":"","notes":"","id":"Asset-2966","assetName":"L5CG3150MT1","ciType":"Laptop","product":"HP EliteBook 860 16 inch G9 Notebook PC","location":"8130 - Beutler AC Services","lastLoginBy":"LFrancecisco","email":"lfrancecisco@ars.com","userName":"Lara Francecisco","jobTitle":"Dispatcher"},{"target":"CMG Version","status":"","notes":"","id":"Asset-3266","assetName":"L2MQ43107CM","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"8130 - Beutler AC Services","lastLoginBy":"JKarl","email":"jkarl@beutler.com","userName":"Jonathan Karl","jobTitle":"Sales Coordinator"},{"target":"CMG Version","status":"","notes":"","id":"Asset-1771","assetName":"L5CG315106S","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8130 - Beutler AC Services","lastLoginBy":"DFranco","email":"dfranco@ars.com","userName":"Diane Franco","jobTitle":"Sales Coordinator"},{"target":"CMG Version","status":"","notes":"","id":"Asset-3075","assetName":"LC2L34200WJ","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"8130 - Beutler AC Services","lastLoginBy":"EWoolever","email":"ewoolever@ars.com","userName":"Esperanza Woolever","jobTitle":"Reg StrategicAlliance Mgr"},{"target":"CMG Version","status":"","notes":"","id":"Asset-1768","assetName":"L5CG3150MTL","ciType":"Laptop","product":"HP EliteBook 860 16 inch G9 Notebook PC","location":"8131 - Atlas Trillo","lastLoginBy":"AngRodriguez","email":"angrodriguez@ars.com","userName":"Angelina Rodriguez","jobTitle":"Accounting Clerk"},{"target":"CMG Version","status":"","notes":"","id":"Asset-10224","assetName":"L2MQ43107CF","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"8131 - Atlas Trillo","lastLoginBy":"SLepas","email":"slepas@atlastrillo.com","userName":"Steven Lepas","jobTitle":"HR Manager"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2306","assetName":"L5CG3232RBB","ciType":"Laptop","product":"HP Elite x360 1040 14 inch G10 2-in-1 Notebook PC","location":"8131 - Atlas Trillo","lastLoginBy":"BRomero","email":"bromero@atlastrillo.com","userName":"Benjamin Romero","jobTitle":"HD Program Manager"},{"target":"CMG Version","status":"","notes":"","id":"Asset-11844","assetName":"L2MQ5070V65","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"8131 - Atlas Trillo","lastLoginBy":"JMendizabalJimenez","email":"jmendizabaljimenez@atlastrillo.com","userName":"Jasson MendizabalJimenez","jobTitle":"Plumbing Trainee"},{"target":"CMG Version","status":"","notes":"","id":"Asset-12279","assetName":"L2MQ5091029","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"8153 - ARS of Colorado","lastLoginBy":"MKohle","email":"mkohle@ars.com","userName":"Matthew Kohle","jobTitle":"AOR Installation Supvr"},{"target":"CMG Version","status":"","notes":"","id":"Asset-12302","assetName":"DMXL5102H6N","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8153 - ARS of Colorado","lastLoginBy":"DThao","email":"dthao@ars.com","userName":"David Thao","jobTitle":"Dispatcher"},{"target":"CMG Version","status":"","notes":"","id":"Asset-1931","assetName":"L5CG315105N","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8277 - Florida Home AC","lastLoginBy":"MySande","email":"mysande@floridahomeac.com","userName":"Myrhdyll Sande","jobTitle":"AOR Helper"},{"target":"CMG Version","status":"","notes":"","id":"Asset-12059","assetName":"DMXL3312MC4","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8277 - Florida Home AC","lastLoginBy":"MySande","email":"mysande@floridahomeac.com","userName":"Myrhdyll Sande","jobTitle":"AOR Helper"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2421","assetName":"L5CG3150ZK6","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8281 - ARS of Orlando","lastLoginBy":"KHeyward","email":"kheyward@ars.com","userName":"Ketura Heyward","jobTitle":"Dispatcher"},{"target":"CMG Version","status":"","notes":"","id":"Asset-14654","assetName":"DMXL5102H75","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"lpineda","email":"lpineda@ars.com","userName":"Lesley Pineda","jobTitle":"Customer Service Rep"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2719","assetName":"DMXL30120C7","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"JReilly","email":"jreilly@ars.com","userName":"Jenaya Messer","jobTitle":"Customer Service Rep"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2319","assetName":"L5CG3150ZKY","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8302 - Allgood Home Services","lastLoginBy":"EGall","email":"egall@ars.com","userName":"Edward Gall","jobTitle":"Plumbing Service Manager"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2323","assetName":"L5CG3150ZRZ","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8302 - Allgood Home Services","lastLoginBy":"GCruce","email":"gcruce@callallgood.com","userName":"Gregory Cruce","jobTitle":"Controller"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2312","assetName":"L5CG3150ZKH","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8302 - Allgood Home Services","lastLoginBy":"JWoody","email":"jwoody@ars.com","userName":"Joshua Woody","jobTitle":"Plumbing Service Manager"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2331","assetName":"DMXL3192F5M","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8302 - Allgood Home Services","lastLoginBy":"CJenkins","email":"cjenkins@ars.com","userName":"Calvin Jenkins","jobTitle":"Sales Coordinator"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2313","assetName":"L5CG3150ZRW","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8302 - Allgood Home Services","lastLoginBy":"SMcCrary","email":"smccrary@callallgood.com","userName":"Scott McCrary","jobTitle":"HVAC Service Supervisor"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2569","assetName":"L5CG3293CLJ","ciType":"Laptop","product":"HP Elite x360 1040 14 inch G10 2-in-1 Notebook PC","location":"8302 - Allgood Home Services","lastLoginBy":"CRowe","email":"crowe@ars.com","userName":"Christian Rowe","jobTitle":"Dispatcher"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2327","assetName":"L5CG3150ZK0","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8302 - Allgood Home Services","lastLoginBy":"CJSmith","email":"cjsmith@ars.com","userName":"Caelib Smith","jobTitle":"Dispatcher"},{"target":"CMG Version","status":"","notes":"","id":"Asset-12575","assetName":"L2MQ5091041","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"8425 - Hamilton","lastLoginBy":"RCAnderson","email":"rcanderson@callhamilton.com","userName":"Raymond Anderson","jobTitle":"Controller"},{"target":"CMG Version","status":"","notes":"","id":"Asset-12570","assetName":"DMXL5093R0B","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8425 - Hamilton","lastLoginBy":"8425DisplayUser","email":"8425displayuser@ars.com","userName":"8425DisplayUser User","jobTitle":""},{"target":"CMG Version","status":"","notes":"","id":"Asset-14797","assetName":"DMXL30120BN","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8450 - Comfort Heating and Air","lastLoginBy":"8450DisplayUser","email":"8450displayuser@ars.com","userName":"8450 DisplayUser","jobTitle":""},{"target":"CMG Version","status":"","notes":"Offline","id":"Asset-1526","assetName":"L5CG3040FD8","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8551 - ARS of Laurel","lastLoginBy":"JaWard","email":"jaward@ars.com","userName":"Jacob Ward","jobTitle":"Purchasing Agent"},{"target":"CMG Version","status":"","notes":"Offline","id":"Asset-2000","assetName":"L5CG3150MSM","ciType":"Laptop","product":"HP EliteBook 860 16 inch G9 Notebook PC","location":"8554 - Blue Dot","lastLoginBy":"RStauffer","email":"rstauffer@ars.com","userName":"Rachel Stauffer","jobTitle":"Customer Care Coord"},{"target":"CMG Version","status":"","notes":"Offline/Disabled/Contain","id":"Asset-2482","assetName":"L5CG2410F00","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8554 - Blue Dot","lastLoginBy":"PMurphy","email":"pmurphy@bluedotmd.com","userName":"Patrick Murphy","jobTitle":"HVAC Service Supervisor"},{"target":"CMG Version","status":"","notes":"Offline/Disabled/Contain","id":"Asset-2627","assetName":"LC2L34102B1","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"8554 - Blue Dot","lastLoginBy":"enottingham","email":"enottingham@bluedotmd.com","userName":"Eric Nottingham","jobTitle":"Weekly Comfort Advisor"},{"target":"CMG Version","status":"","notes":"Offline/Disabled/Contain","id":"Asset-1269","assetName":"L5CG30413KS","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8554 - Blue Dot","lastLoginBy":"JWeissberg","email":"jweissberg@bluedotmd.com","userName":"Judy Weissberg","jobTitle":"Operations Manager"},{"target":"CMG Version","status":"","notes":"Offline/last online 2-13","id":"Asset-13710","assetName":"DMXL5102H8B","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8577 - ARS of Boston South","lastLoginBy":"AHSmith","email":"ahsmith@ars.com","userName":"Andrew Smith","jobTitle":"Dispatcher"},{"target":"CMG Version","status":"","notes":"","id":"Asset-18920","assetName":"DMXL3192F6H","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8603 - ARS of Detroit","lastLoginBy":"BBrady","email":"bbrady@ars.com","userName":"Bowen Brady","jobTitle":"Sales Coordinator"},{"target":"CMG Version","status":"","notes":"","id":"Asset-13447","assetName":"DMXL5093QRZ","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8757 - Yes! AC & Plumbing","lastLoginBy":"HBond","email":"hbond@ars.com","userName":"Howard Bond","jobTitle":"Sales Coordinator"},{"target":"CMG Version","status":"","notes":"Offline","id":"Asset-17926","assetName":"DMXL3192F90","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8802 - AJ Perri","lastLoginBy":"ORodriguez","email":"orodriguez@ajperri.com","userName":"Omar Rodriguez","jobTitle":"Sales Manager"},{"target":"CMG Version","status":"","notes":"Offline/last online 2-19","id":"Asset-2060","assetName":"L5CG3313H5R","ciType":"Laptop","product":"HP EliteBook 860 16 inch G10 Notebook PC","location":"8802 - AJ Perri","lastLoginBy":"JMasiero","email":"jmasiero@ajperri.com","userName":"Jake Masiero","jobTitle":"HVAC Service Manager"},{"target":"CMG Version","status":"","notes":"Offline","id":"Asset-13113","assetName":"L2MQ5090YWK","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"8876 - ARS of Raleigh","lastLoginBy":"BQuintard","email":"bquintard@ars.com","userName":"Bryan Quintard","jobTitle":"Weekly Comfort Advisor"},{"target":"CMG Version","status":"","notes":"Offline","id":"Asset-13679","assetName":"L2MQ5070V6J","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"8876 - ARS of Raleigh","lastLoginBy":"AAcevedo","email":"aacevedo@ars.com","userName":"Arturo Acevedo","jobTitle":"Weekly Comfort Advisor"},{"target":"CMG Version","status":"","notes":"Offline/last online 3-23","id":"Asset-13693","assetName":"L2MQ5070V4S","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"8876 - ARS of Raleigh","lastLoginBy":"AFranklin","email":"afranklin@ars.com","userName":"Aaron Franklin","jobTitle":"Weekly Plumb Repair Spec"},{"target":"CMG Version","status":"","notes":"Offline","id":"Asset-13687","assetName":"L2MQ5070V6B","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"8877 - ARS of Durham","lastLoginBy":"AOlivo","email":"aolivo@ars.com","userName":"Alfredo Olivo","jobTitle":"Weekly Comfort Advisor"},{"target":"CMG Version","status":"","notes":"Offline","id":"Asset-14037","assetName":"L2MQ5070TZX1","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"8880 - ARS of Wilmington","lastLoginBy":"ELang","email":"elang@ars.com","userName":"Evan Lang","jobTitle":"Weekly Comfort Advisor"},{"target":"CMG Version","status":"","notes":"Offline","id":"Asset-14036","assetName":"L2MQ5070V11","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"8880 - ARS of Wilmington","lastLoginBy":"WIreland","email":"wireland@ars.com","userName":"William Ireland","jobTitle":"Weekly Comfort Advisor"},{"target":"CMG Version","status":"","notes":"Offline/last online 2-24","id":"Asset-1632","assetName":"L5CG3150MT2","ciType":"Laptop","product":"HP EliteBook 860 16 inch G9 Notebook PC","location":"8880 - ARS of Wilmington","lastLoginBy":"BHammett","email":"bhammett@ars.com","userName":"Brian Hammett","jobTitle":"Weekly Comfort Advisor"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2179","assetName":"L5CG3040FFD","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8927 - RR of Cleveland","lastLoginBy":"jdorsey","email":"jdorsey@ars.com","userName":"Jason Dorsey","jobTitle":"Weekly Commercial Acct Rp"},{"target":"CMG Version","status":"","notes":"","id":"Asset-3163","assetName":"L5CG3150ZRG","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8927 - RR of Cleveland","lastLoginBy":"JConti","email":"jconti@ars.com","userName":"John Conti","jobTitle":"Weekly Commercial Acct Rp"},{"target":"CMG Version","status":"","notes":"","id":"Asset-15159","assetName":"DMXL5093QS5","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8927 - RR of Cleveland","lastLoginBy":"8927Display","email":"8927display@ars.com","userName":"8927 Display","jobTitle":""},{"target":"CMG Version","status":"","notes":"","id":"Asset-14364","assetName":"DMXL51026S6","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8928 - Columbus Worthington Air","lastLoginBy":"MHobson","email":"mhobson@cwaohio.com","userName":"Mitzi Hobson","jobTitle":"Dispatcher"},{"target":"CMG Version","status":"","notes":"Offline","id":"Asset-14306","assetName":"L2MQ5280JT5","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9051 - ARS of Charleston","lastLoginBy":"HDawson","email":"hdawson@ars.com","userName":"Heyward Dawson","jobTitle":"HVAC AOR Sales Rep"},{"target":"CMG Version","status":"","notes":"Offline/User onsite tomorrow to check","id":"Asset-14360","assetName":"L2MQ5280JQ4","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9051 - ARS of Charleston","lastLoginBy":"ARSKiosk","email":"scarmon@ars.com","userName":"Sherry Carmon","jobTitle":"HR Manager"},{"target":"CMG Version","status":"","notes":"Offline/last online 2-20","id":"Asset-14302","assetName":"DMXL5093QTT","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"9051 - ARS of Charleston","lastLoginBy":"9051display","email":"9051display@ars.com","userName":"9051 Display","jobTitle":""},{"target":"CMG Version","status":"","notes":"Offline","id":"Asset-2588","assetName":"L5CG3150ZRK","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9052 - ARS of Columbia","lastLoginBy":"SEasley","email":"seasley@ars.com","userName":"Shawn Easley","jobTitle":"Weekly Comfort Advisor"},{"target":"CMG Version","status":"","notes":"Offline/Disabled/Contain","id":"Asset-14315","assetName":"DMXL5093QZ1","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"9052 - ARS of Columbia","lastLoginBy":"CMCopeland","email":"cmcopeland@ars.com","userName":"Corey Copeland","jobTitle":"Dispatcher"},{"target":"CMG Version","status":"","notes":"Offline","id":"Asset-1918","assetName":"L5CG3150ZSR","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9055 - ARS of Myrtle Beach","lastLoginBy":"mWilder","email":"mwilder@ars.com","userName":"Marcus Wilder","jobTitle":"Weekly Comfort Advisor"},{"target":"CMG Version","status":"","notes":"Can't connect, installing RAP","id":"Asset-13960","assetName":"L5CG30220631","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9055 - ARS of Myrtle Beach","lastLoginBy":"AntRodriguez","email":"antrodriguez@ars.com","userName":"Anthony RodriguezRoman","jobTitle":"HVAC AOR Sales Rep"},{"target":"CMG Version","status":"","notes":"Offline","id":"Asset-19498","assetName":"L2MQ5280JQP","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9055 - ARS of Myrtle Beach","lastLoginBy":"MSarrio","email":"msarrio@ars.com","userName":"Matthew Sarrio","jobTitle":"HVAC AOR Sales Rep"},{"target":"CMG Version","status":"","notes":"Offline/last online 3-17","id":"Asset-9940","assetName":"L2MQ44608VM","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9055 - ARS of Myrtle Beach","lastLoginBy":"BStanley","email":"bstanley@ars.com","userName":"Bradley Stanley","jobTitle":"Weekly Comfort Advisor"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2692","assetName":"L5CG3150ZDL","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9062 - Brother's","lastLoginBy":"JesLopez","email":"jeslopez@brotherair.com","userName":"Jessica Contreras","jobTitle":"Scheduler"},{"target":"CMG Version","status":"","notes":"","id":"Asset-12649","assetName":"DMXL5093QW1","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"9062 - Brother's","lastLoginBy":"CBolton","email":"christyb@brotherair.com","userName":"Christine Bolton","jobTitle":"Controller"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2264","assetName":"L5CG3150ZRX","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9062 - Brother's","lastLoginBy":"TBaker","email":"tbaker@brotherair.com","userName":"Thomas Baker","jobTitle":"Weekly Comfort Advisor"},{"target":"CMG Version","status":"","notes":"","id":"Asset-3365","assetName":"DMXL3312MFW","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"9062 - Brother's","lastLoginBy":"dguido","email":"dguido@brotherair.com","userName":"Daniel Guido","jobTitle":"Warehouse Specialist"},{"target":"CMG Version","status":"","notes":"","id":"Asset-12661","assetName":"L2MQ509103H1","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9062 - Brother's","lastLoginBy":"RMcManus","email":"rmcmanus@brotherair.com","userName":"Robert McManus","jobTitle":"Weekly Comfort Advisor"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2141","assetName":"L5CG3151017","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9106 - Conway Services","lastLoginBy":"RMcDaniel","email":"rmcdaniel@conwayservices.net","userName":"Rikki McDaniel","jobTitle":"Scheduler"},{"target":"CMG Version","status":"","notes":"","id":"Asset-1479","assetName":"L5CG3040FDL","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9126 - ARS of Dallas","lastLoginBy":"JaGage","email":"jjmoreno@ars.com","userName":"Jesse Moreno","jobTitle":"Weekly Commercial Acct Rp"},{"target":"CMG Version","status":"","notes":"","id":"Asset-16685","assetName":"L5CG3040FF1","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9126 - ARS of Dallas","lastLoginBy":"PHicks","email":"phicks@ars.com","userName":"Peyton Hicks","jobTitle":"Dispatcher"},{"target":"CMG Version","status":"","notes":"","id":"Asset-16099","assetName":"L5CG3232R9N","ciType":"Laptop","product":"HP Elite x360 1040 14 inch G10 2-in-1 Notebook PC","location":"9128 - ARS DFW","lastLoginBy":"astarks","email":"astarks@ars.com","userName":"AntiJuan Starks","jobTitle":"Safety Manager"},{"target":"CMG Version","status":"","notes":"","id":"Asset-13528","assetName":"DMXL5093QXP","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"9132 - ARS of Austin","lastLoginBy":"AHibbs","email":"ahibbs@ars.com","userName":"Austin Hibbs","jobTitle":"Plumbing Helper"},{"target":"CMG Version","status":"","notes":"","id":"Asset-17181","assetName":"L2MQ5070V4V","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9133 - ARS of San Antonio","lastLoginBy":"JoGonzales","email":"jogonzales@ars.com","userName":"Joe Gonzales","jobTitle":"HVAC Service Supervisor"},{"target":"CMG Version","status":"","notes":"","id":"Asset-1811","assetName":"L5CG315101N","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9133 - ARS of San Antonio","lastLoginBy":"BHilton","email":"bhilton@ars.com","userName":"Brooklynn Hilton","jobTitle":"Scheduler"},{"target":"CMG Version","status":"","notes":"","id":"Asset-17177","assetName":"DMXL5093QXW","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"9153 - Yes! Utah","lastLoginBy":"MTorresAlmeida","email":"","userName":"","jobTitle":""},{"target":"CMG Version","status":"","notes":"","id":"Asset-1385","assetName":"L5CG3040F91","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9201 - ARS of Manassas","lastLoginBy":"GWilson","email":"gwilson@ars.com","userName":"Gregory Wilson","jobTitle":"HVAC Sales Manager"},{"target":"CMG Version","status":"","notes":"","id":"Asset-12638","assetName":"L2MQ5090YWM","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9226 - RR of Seattle","lastLoginBy":"JDannenberg","email":"jdannenberg@ars.com","userName":"Joseph Dannenberg","jobTitle":"Weekly Commercial Acct Rp"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2751","assetName":"LC2L34200XF","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"9228 - Blue Flame Heating &Air","lastLoginBy":"CRChambers","email":"crchambers@blueflamecomfort.com","userName":"Conner Chambers","jobTitle":"AOR Installation Tech"},{"target":"CMG Version","status":"","notes":"","id":"Asset-15069","assetName":"L2MQ509101D","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9228 - Blue Flame Heating &Air","lastLoginBy":"CNichols","email":"cnichols@blueflamecomfort.com","userName":"Connar Nichols","jobTitle":"HVAC Sales Manager"},{"target":"CMG Version","status":"","notes":"","id":"Asset-12970","assetName":"L5CG3313H5G","ciType":"Laptop","product":"HP EliteBook 860 16 inch G10 Notebook PC","location":"9228 - Blue Flame Heating &Air","lastLoginBy":"BRuddell","email":"bruddell@ars.com","userName":"Bradley Ruddell","jobTitle":"AOR Installation Manager"},{"target":"CMG Version","status":"","notes":"","id":"Asset-17186","assetName":"DMXL1462WVT","ciType":"Desktop","product":"HP ProDesk 600 G6 Desktop Mini PC","location":"9700 - ARS Corporate","lastLoginBy":"CrYoung","email":"cryoung@ars.com","userName":"Crystal Young","jobTitle":"Accounts Payable Spc"},{"target":"CMG Version","status":"","notes":"","id":"Asset-15050","assetName":"L2MQ50804XS","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9700 - ARS Corporate","lastLoginBy":"rdarling","email":"rdarling@ars.com","userName":"Rob Darling","jobTitle":"Consultant"},{"target":"CMG Version","status":"","notes":"","id":"Asset-16282","assetName":"L2MQ4460WJG","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9700 - ARS Corporate","lastLoginBy":"DJay","email":"","userName":"","jobTitle":""},{"target":"CMG Version","status":"","notes":"","id":"Asset-2166","assetName":"L5CG3201VYS","ciType":"Laptop","product":"HP EliteBook 1040 14 inch G9 Notebook PC","location":"9700 - ARS Corporate","lastLoginBy":"Mking","email":"mking@ars.com","userName":"Mary King","jobTitle":"Business Analyst"},{"target":"CMG Version","status":"","notes":"","id":"Asset-18906","assetName":"DMJ009UPW","ciType":"Desktop","product":"ThinkCentre M83","location":"9700 - ARS Corporate","lastLoginBy":"AvayaDataUser","email":"","userName":"","jobTitle":""},{"target":"CMG Version","status":"","notes":"","id":"Asset-2256","assetName":"L5CG3232R9J","ciType":"Laptop","product":"HP Elite x360 1040 14 inch G10 2-in-1 Notebook PC","location":"9700 - Corporate","lastLoginBy":"CHuggins","email":"chuggins@ars.com","userName":"Christopher Huggins","jobTitle":"IT Support Tech"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2265","assetName":"L5CG3201VY7","ciType":"Laptop","product":"HP EliteBook 1040 14 inch G9 Notebook PC","location":"9700 - Corporate","lastLoginBy":"MRodriguez","email":"mrodriguez@ars.com","userName":"Mario Rodriguez","jobTitle":"Field IT Analyst"},{"target":"CMG Version","status":"","notes":"","id":"Asset-17692","assetName":"DMXL3192F81","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"9700 - Corporate","lastLoginBy":"jvillalobos","email":"jvillalobos@ars.com","userName":"Jose Villalobos","jobTitle":"Field IT Analyst"},{"target":"CMG Version","status":"","notes":"","id":"Asset-19077","assetName":"DMXL3192F9D","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"9700 - Corporate","lastLoginBy":"jvillalobos","email":"jvillalobos@ars.com","userName":"Jose Villalobos","jobTitle":"Field IT Analyst"},{"target":"CMG Version","status":"","notes":"","id":"Asset-13428","assetName":"L2MQ5091047","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9700 - Corporate","lastLoginBy":"JBarsky","email":"jbarsky@ars.com","userName":"Jessie Barsky","jobTitle":"Field IT Analyst"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2553","assetName":"L5CG2403YVH","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9700 - Corporate","lastLoginBy":"MRodriguez","email":"mrodriguez@ars.com","userName":"Mario Rodriguez","jobTitle":"Field IT Analyst"},{"target":"CMG Version","status":"","notes":"","id":"Asset-2673","assetName":"L5CG3201VY1","ciType":"Laptop","product":"HP EliteBook 1040 14 inch G9 Notebook PC","location":"9700 - Corporate","lastLoginBy":"MRodriguez","email":"mrodriguez@ars.com","userName":"Mario Rodriguez","jobTitle":"Field IT Analyst"},{"target":"CMG Version","status":"","notes":"","id":"Asset-1245","assetName":"L5CG2410D06","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9700 - Corporate","lastLoginBy":"LPfleiderer","email":"lpfleiderer@ars.com","userName":"Lauren Pfleiderer","jobTitle":"Recruiter"},{"target":"CMG Version","status":"","notes":"","id":"Asset-11686","assetName":"L2MQ5070V08","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9700 - Corporate","lastLoginBy":"IJustiniano.2","email":"ijustiniano@ars.com","userName":"Ismael Justiniano","jobTitle":"Field IT Analyst"},{"target":"CMG Version","status":"","notes":"","id":"Asset-1621","assetName":"L5CG3040FG0","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9700 - Corporate","lastLoginBy":"MRodriguez","email":"mrodriguez@ars.com","userName":"Mario Rodriguez","jobTitle":"Field IT Analyst"},{"target":"CMG Version","status":"","notes":"","id":"Asset-1261","assetName":"L5CG2403YS7","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9700 - Corporate","lastLoginBy":"VFackovec","email":"vfackovec@ajperri.com","userName":"Victoria Fackovec","jobTitle":"Division HR Manager"},{"target":"CMG Version","status":"","notes":"","id":"Asset-1882","assetName":"L5CG315106T","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9700 - Corporate","lastLoginBy":"mrodriguez.2","email":"whakey@ars.com","userName":"Whitney Hakey","jobTitle":"Recruiter"},{"target":"CMG Version","status":"","notes":"","id":"Asset-3102","assetName":"L5CG3293CLQ","ciType":"Laptop","product":"HP Elite x360 1040 14 inch G10 2-in-1 Notebook PC","location":"9700 - Corporate","lastLoginBy":"SuGross","email":"sugross@ars.com","userName":"Susan Gross","jobTitle":"Quality Assurance Analyst"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19453","assetName":"DMXL30120DG","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8120 - RighTime Riverside","lastLoginBy":"JVillalobos.2","email":"JVillalobos.2@ars.com","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19452","assetName":"DMXL30120BT","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8120 - RighTime Riverside","lastLoginBy":"JVillalobos.2","email":"JVillalobos.2@ars.com","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-1504","assetName":"DMXL30120BF","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8120 - RighTime Riverside","lastLoginBy":"equezada","email":"equezada@ars.com","userName":"Esperanza Quezada","jobTitle":"Telemarketing Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-1501","assetName":"DMXL301209J","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8120 - RighTime Riverside","lastLoginBy":"mejones","email":"mejones@rightimeservices.com","userName":"Melanie Jones","jobTitle":"Install Supervisor"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-17495","assetName":"DMXL3192F8J","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8120 - RighTime Riverside","lastLoginBy":"jvillalobos.2","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-9929","assetName":"L5CG3313H63","ciType":"Laptop","product":"HP EliteBook 860 16 inch G10 Notebook PC","location":"8120 - RighTime Riverside","lastLoginBy":"","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-12303","assetName":"DMXL5102H57","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8153 - ARS of Colorado","lastLoginBy":"SBurt","email":"sburt@ars.com","userName":"Sirrita Burt","jobTitle":"Dispatcher"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-12062","assetName":"L2MQ5091046","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"8277 - Florida Home AC","lastLoginBy":"LCorbitt","email":"lcorbitt@floridahomeac.com","userName":"LaVaris Corbitt","jobTitle":"Scheduler"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-1931","assetName":"L5CG315105N","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8277 - Florida Home AC","lastLoginBy":"MySande","email":"mysande@floridahomeac.com","userName":"Myrhdyll Sande","jobTitle":"AOR Helper"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19349","assetName":"DMXL3312MGT","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8281 - ARS of Orlando","lastLoginBy":"sknight","email":"sknight@ars.com","userName":"Shandell Knight","jobTitle":"Dispatcher"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-18997","assetName":"DMXL3192F8W","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"8298display","email":"8298display@ars.com","userName":"8298 Display","jobTitle":"SE Call Center Display Computer"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-14644","assetName":"DMXL5102H8J","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"abenaine","email":"abenaine@ars.com","userName":"Aaliyah Benaine","jobTitle":"Customer Service Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-14641","assetName":"DMXL5102H3K","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"jcolliersadoski","email":"jcolliersadoski@ars.com","userName":"Jennifer CollierSadoski","jobTitle":"Customer Service Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-14612","assetName":"DMXL5102H9N","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"bgarciaespinosa","email":"bgarciaespinosa@ars.com","userName":"Brandy GarciaEspinosa","jobTitle":"Cust Service Spc"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19019","assetName":"DMXL3386CXM","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-14577","assetName":"DMXL51026QT","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"RRobinson","email":"rrobinson@ars.com","userName":"Regine Robinson","jobTitle":"Customer Service Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-18919","assetName":"DMXL3386CWX","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"8298display","email":"8298display@ars.com","userName":"8298 Display","jobTitle":"SE Call Center Display Computer"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19341","assetName":"DMXL3312MBP","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"mabdallah.2","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-17795","assetName":"DMXL3386CXL","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"MariRodriguez","email":"marirodriguez@ars.com","userName":"Marichard Rodriguez","jobTitle":"Customer Service Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-14563","assetName":"DMXL51026SD","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-3138","assetName":"DMXL30120BR","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"DFountain","email":"aduval@ars.com","userName":"Arianna Duval","jobTitle":"Customer Service Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-14619","assetName":"DMXL5102H61","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"acaraballo","email":"acaraballo@ars.com","userName":"Angela Caraballo","jobTitle":"Customer Service Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-2913","assetName":"DMXL3386CX7","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"IMacedon","email":"imacedon@ars.com","userName":"Ibresha Macedon","jobTitle":"Customer Service Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-18988","assetName":"DMXL3312MCK","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"TTate","email":"ttate@ars.com","userName":"Tomya Tate","jobTitle":"Customer Service Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-3008","assetName":"DMXL3386CXX","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"JSWilson","email":"jswilson@ars.com","userName":"Jenita Wilson","jobTitle":"Customer Service Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-11690","assetName":"DMXL3312MBF","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"KShelton","email":"kshelton@ars.com","userName":"Kadeana Shelton","jobTitle":"Cust Service Spc"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-11705","assetName":"DMXL3312MGV","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"TDelay","email":"tdelay@ars.com","userName":"Terrence Delay","jobTitle":"Customer Service Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-14618","assetName":"DMXL5102H99","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"MFloence","email":"mfloence@ars.com","userName":"Mya Floence","jobTitle":"Customer Service Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-2719","assetName":"DMXL30120C7","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"JReilly","email":"jreilly@ars.com","userName":"Jenaya Messer","jobTitle":"Customer Service Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-14602","assetName":"DMXL5102H6Y","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"MAgenor","email":"magenor@ars.com","userName":"Maudeline Agenor","jobTitle":"Cust Service Spc"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-11657","assetName":"DMXL3386CXY","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8298 - Orlando Call Center","lastLoginBy":"JMorilloCabreja","email":"jmorillocabreja@ars.com","userName":"Julio MorilloCabreja","jobTitle":"Customer Service Supvr"},{"target":"Not Encrypted","status":"","notes":"Will check on 5/19","id":"Asset-16979","assetName":"DMXL5514QTK","ciType":"Desktop","product":"HP EliteDesk 8 Mini G1i Desktop AI PC","location":"8299 - Houston Call Center","lastLoginBy":"AEinfeldt","email":"aeinfeldt@ars.com","userName":"Andre Einfeldt","jobTitle":"Customer Service Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16155","assetName":"L5CG3150ZDM","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8302 - Allgood Home Services","lastLoginBy":"ATippins","email":"atippins@ars.com","userName":"Ashley Tippins","jobTitle":"HD Program Manager"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16869","assetName":"L1H9603H1C3","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook AI PC","location":"8302 - Allgood Home Services","lastLoginBy":"CJSmith","email":"cjsmith@ars.com","userName":"Caelib Smith","jobTitle":"Dispatcher"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-2330","assetName":"DMXL3192F5T","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"8302 - Allgood Home Services","lastLoginBy":"VMaria","email":"vmaria@ars.com","userName":"Victor Maria","jobTitle":"Warehouse Specialist"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16726","assetName":"L2MQ5280LG4","ciType":"Laptop","product":"HP EliteBook 860 16 inch G11 Notebook PC","location":"8404 - ARS of Indianapolis","lastLoginBy":"SCochran","email":"scochran@ars.com","userName":"Shawn Cochran","jobTitle":"Plumbing Service Manager"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-17083","assetName":"L5CG3040F7P","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8450 - Comfort Heating and Air","lastLoginBy":"","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19496","assetName":"DMXL5372Y6H","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8551 - ARS of Laurel","lastLoginBy":"JCurrie","email":"jcurrie@ars.com","userName":"Jznee Currie","jobTitle":"Sales Coordinator"},{"target":"Not Encrypted","status":"updated","notes":"","id":"Asset-2001","assetName":"L5CG3150ZS5","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8554 - Blue Dot","lastLoginBy":"msapp","email":"msapp@ars.com","userName":"Mikayla Sapp","jobTitle":"Sales Coordinator"},{"target":"Not Encrypted","status":"updated","notes":"","id":"Asset-12136","assetName":"L2MQ509102P","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"8554 - Blue Dot","lastLoginBy":"tloney","email":"tloney@bluedotmd.com","userName":"Tamika Loney","jobTitle":"Quality Assurance Manager"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16950","assetName":"L2MQ60619VS","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"8603 - ARS of Detroit","lastLoginBy":"TMBerry","email":"tmberry@ars.com","userName":"Talitha Berry","jobTitle":"HD Program Manager"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-1825","assetName":"L5CG3150ZJY","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8603 - ARS of Detroit","lastLoginBy":"JReinhard","email":"jreinhard@ars.com","userName":"John Reinhard","jobTitle":"AOR Installation Tech"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-12848","assetName":"DMXL5102H42","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8802 - AJ Perri","lastLoginBy":"kmacdonald","email":"kmacdonald@ajperri.com","userName":"Kristina MacDonald","jobTitle":"Customer Service Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-12839","assetName":"DMXL5102H7X","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8802 - AJ Perri","lastLoginBy":"nkohilawaththa","email":"nkohilawaththa@ajperri.com","userName":"Nishani Kohilawaththa","jobTitle":"Customer Service Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-1806","assetName":"L5CG315105R","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"8876 - ARS of Raleigh","lastLoginBy":"MTorres","email":"mtorres@ars.com","userName":"Marco Torres","jobTitle":"Asst Sales Manager"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-17200","assetName":"L2MQ6130Z2W","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"8877 - ARS of Durham","lastLoginBy":"rherz","email":"rherz@ars.com","userName":"Ryan Herz","jobTitle":"Weekly Comfort Advisor"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-14039","assetName":"L2MQ5070V60","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"8880 - ARS of Wilmington","lastLoginBy":"BTGray","email":"btgray@ars.com","userName":"Bryan Gray","jobTitle":"Weekly Comfort Advisor"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16812","assetName":"DMXL5093QSM","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"8927 - RR of Cleveland","lastLoginBy":"8927Display","email":"8927display@ars.com","userName":"8927 Display","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-9474","assetName":"L2MQ43107CG","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"9055 - ARS of Myrtle Beach","lastLoginBy":"defaultuser0","email":"rreardon@ars.com","userName":"Robert Reardon","jobTitle":"Weekly Comfort Advisor"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-12143","assetName":"L2MQ509104Q","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9055 - ARS of Myrtle Beach","lastLoginBy":"TSherred","email":"tsherred@ars.com","userName":"Todd Sherred","jobTitle":"Weekly Comfort Advisor"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-9943","assetName":"L5CG3025QL1","ciType":"Laptop","product":"HP EliteBook 860 16 inch G9 Notebook PC","location":"9055 - ARS of Myrtle Beach","lastLoginBy":"RCarreira","email":"mcarreira@ars.com","userName":"Rui Carreira","jobTitle":"HVAC Sales Manager"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-2237","assetName":"L5CG3150ZF9","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9062 - Brother's","lastLoginBy":"bnasekos","email":"bnasekos@ars.com","userName":"Bobby Nasekos","jobTitle":"AOR Installation Supvr"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-2243","assetName":"DMXL301209Z","ciType":"Desktop","product":"HP Elite Mini 600 G9 Desktop PC","location":"9062 - Brother's","lastLoginBy":"CShepherd","email":"cshepherd@brotherair.com","userName":"Courtney Bradley","jobTitle":"Warehouse Specialist"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-12661","assetName":"L2MQ509103H1","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9062 - Brother's","lastLoginBy":"RMcManus","email":"rmcmanus@brotherair.com","userName":"Robert McManus","jobTitle":"Weekly Comfort Advisor"},{"target":"Not Encrypted","status":"","notes":"Unable to reach user","id":"Asset-1366","assetName":"L5CG3040FCF","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9103 - ARS of Nashville","lastLoginBy":"defaultuser0","email":"jstewart@ars.com","userName":"John Stewart","jobTitle":"Warehouse Inventory Mgr"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16212","assetName":"L2MQ509102N","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9106 - Conway Services","lastLoginBy":"LHart","email":"lhart@ars.com","userName":"Lawrence Hart","jobTitle":"Scheduler"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16926","assetName":"L2MQ5280JQ6","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9106 - Conway Services","lastLoginBy":"TMinton","email":"tminton@conwayservices.net","userName":"Tashanna Minton","jobTitle":"Controller"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-13061","assetName":"L5CG3040FF0","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9126 - ARS of Dallas","lastLoginBy":"defaultuser0","email":"bbroyles@ars.com","userName":"Brad Broyles","jobTitle":"Dispatcher"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-11865","assetName":"L2MQ5070XZX","ciType":"Laptop","product":"HP EliteBook 860 16 inch G11 Notebook PC","location":"9128 - ARS DFW","lastLoginBy":"NLinnes","email":"nlinnes@ars.com","userName":"Nicole Linnes","jobTitle":"Scheduler"},{"target":"Not Encrypted","status":"","notes":"SAM Test Machine - Will reimage","id":"Asset-3168","assetName":"L5CG227407H","ciType":"Laptop","product":"HP EliteBook 860 16 inch G9 Notebook PC","location":"9131 - ARS of Houston","lastLoginBy":"Administrator","email":"t-msamma@ars.com","userName":"Murtaza Samma","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"Will check on 5/19","id":"Asset-16993","assetName":"DMXL5514QSR","ciType":"Desktop","product":"HP EliteDesk 8 Mini G1i Desktop AI PC","location":"9131 - ARS of Houston","lastLoginBy":"CTeel","email":"CTeel@ars.com","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-14271","assetName":"L2MQ510135J","ciType":"Laptop","product":"HP EliteBook 860 16 inch G11 Notebook PC","location":"9133 - ARS of San Antonio","lastLoginBy":"rwoodward","email":"rwoodward@ars.com","userName":"Rhonda Woodward","jobTitle":"Dispatch Manager"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-2844","assetName":"LC2L34200XC","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"9153 - Yes! Utah","lastLoginBy":"moyler","email":"moyler@theyesmancan.com","userName":"Matthew Oyler","jobTitle":"SM - Comfort Advisor"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-17001","assetName":"L2MQ60616S7","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"9201 - ARS of Manassas","lastLoginBy":"KTorres","email":"ktorres@ars.com","userName":"Kevin Torres","jobTitle":"Sales Coordinator"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-1381","assetName":"L5CG30413KG","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9201 - ARS of Manassas","lastLoginBy":"defaultuser0","email":"dsullivan@ars.com","userName":"David Sullivan","jobTitle":"AOR Installation Manager"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-2387","assetName":"L5CG3150ZDH","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9201 - ARS of Manassas","lastLoginBy":"RBumbray","email":"rbumbray@ars.com","userName":"Regina Bumbray","jobTitle":"Service Coordinator"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-2388","assetName":"L5CG3150ZKR","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9201 - ARS of Manassas","lastLoginBy":"MBurgosOrtiz","email":"mburgosortiz@ars.com","userName":"Miguel BurgosOrtiz","jobTitle":"Inside Sales Rep"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16930","assetName":"L2MQ60619WP","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"9202 - McCarthy Services","lastLoginBy":"JBarsky.2","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16516","assetName":"L2MQ43501NL","ciType":"Laptop","product":"HP EliteBook 860 16 inch G11 Notebook PC","location":"9664 - East Division","lastLoginBy":"BBarela","email":"bbarela@ars.com","userName":"Brian Barela","jobTitle":"Region Sales Manager"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19464","assetName":"DMXL5093QYC","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"9700 - ARS Corporate","lastLoginBy":"9700DisplayUser","email":"9700displayuser@corporate.com","userName":"9700Display User","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16281","assetName":"L2MQ4460WHZ","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9700 - ARS Corporate","lastLoginBy":"KSubramanian","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19484","assetName":"L2MQ61307JP","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"9700 - ARS Corporate","lastLoginBy":"","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19478","assetName":"L2MQ6070SMW","ciType":"Laptop","product":"HP EliteBook 8 G1i 16 inch Notebook Next Gen AI PC","location":"9700 - ARS Corporate","lastLoginBy":"","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19428","assetName":"L1H95241STD","ciType":"Laptop","product":"HP EliteBook 8 G1i 16 inch Notebook Next Gen AI PC","location":"9700 - ARS Corporate","lastLoginBy":"defaultuser0","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19471","assetName":"L1H95241825","ciType":"Laptop","product":"HP EliteBook 8 G1i 16 inch Notebook Next Gen AI PC","location":"9700 - ARS Corporate","lastLoginBy":"KSTOKES","email":"KSTOKES@ars.com","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19441","assetName":"L2MQ6130752","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"9700 - ARS Corporate","lastLoginBy":"","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19433","assetName":"L2MQ6070RW8","ciType":"Laptop","product":"HP EliteBook 8 G1i 16 inch Notebook Next Gen AI PC","location":"9700 - ARS Corporate","lastLoginBy":"defaultuser0","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19432","assetName":"L2MQ6070SF0","ciType":"Laptop","product":"HP EliteBook 8 G1i 16 inch Notebook Next Gen AI PC","location":"9700 - ARS Corporate","lastLoginBy":"","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19431","assetName":"L2MQ6070SMR","ciType":"Laptop","product":"HP EliteBook 8 G1i 16 inch Notebook Next Gen AI PC","location":"9700 - ARS Corporate","lastLoginBy":"","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19426","assetName":"L1H95250T1C","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"9700 - ARS Corporate","lastLoginBy":"ADumitrescu","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19425","assetName":"L1H95250T5S","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"9700 - ARS Corporate","lastLoginBy":"","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-17165","assetName":"L1H95250RVK","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"9700 - ARS Corporate","lastLoginBy":"HStevens","email":"HStevens@ars.com","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-17097","assetName":"L1H95250SPJ","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"9700 - ARS Corporate","lastLoginBy":"cb-stejuja","email":"cb-stejuja@ars.com","userName":"Shivani Tejuja Charlesbank","jobTitle":"Senior Associate"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-3257","assetName":"L5CG408137F","ciType":"Laptop","product":"HP EliteBook 1040 14 inch G10 Notebook PC","location":"9700 - ARS Corporate","lastLoginBy":"defaultuser0","email":"pgangina@ars.com","userName":"Phanindra Gangina","jobTitle":"Developer"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16500","assetName":"L2MQ5150Z8K","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9700 - ARS Corporate","lastLoginBy":"","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16282","assetName":"L2MQ4460WJG","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9700 - ARS Corporate","lastLoginBy":"DJay","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16425","assetName":"L2MQ5101342","ciType":"Laptop","product":"HP EliteBook 860 16 inch G11 Notebook PC","location":"9700 - ARS Corporate","lastLoginBy":"NBlades","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16239","assetName":"DMXL5093R02","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"9700 - ARS Corporate","lastLoginBy":"CWeideman","email":"","userName":"","jobTitle":""},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-15163","assetName":"DMXL5093QY2","ciType":"Desktop","product":"HP Elite Mini 800 G9 Desktop PC","location":"9700 - Corporate","lastLoginBy":"ErWilliams","email":"rthornton@ars.com","userName":"Russell Thornton","jobTitle":"Acq Integration Admin"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-17159","assetName":"L2MQ6130Z3R","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"9700 - Corporate","lastLoginBy":"jbarsky","email":"jbarsky@ars.com","userName":"Jessie Barsky","jobTitle":"Field IT Analyst"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-17162","assetName":"L2MQ6130Z2P","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"9700 - Corporate","lastLoginBy":"JBarsky","email":"jbarsky@ars.com","userName":"Jessie Barsky","jobTitle":"Field IT Analyst"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-19492","assetName":"L2MQ61307LJ","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"9700 - Corporate","lastLoginBy":"jbarsky","email":"jbarsky@ars.com","userName":"Jessie Barsky","jobTitle":"Field IT Analyst"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-17151","assetName":"L2MQ6130Z25","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"9700 - Corporate","lastLoginBy":"jbarsky","email":"jbarsky@ars.com","userName":"Jessie Barsky","jobTitle":"Field IT Analyst"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-17104","assetName":"L1H95250SW9","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"9700 - Corporate","lastLoginBy":"JaHarris","email":"jaharris@ars.com","userName":"Janice Harris","jobTitle":"Business Relationship Mgr"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-2434","assetName":"L5CG3314D8B","ciType":"Laptop","product":"HP EliteBook 840 14 inch G10 Notebook PC","location":"9700 - Corporate","lastLoginBy":"MKoziara","email":"mkoziara@ars.com","userName":"Michael Koziara","jobTitle":"Dir Strategic Initiatives"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16224","assetName":"L2MQ5070V1D","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9700 - Corporate","lastLoginBy":"SRespess","email":"srespess@ars.com","userName":"Sylvia Respess","jobTitle":"Cash Management Supvr"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-17081","assetName":"L1H95250T4Q","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook Next Gen AI PC","location":"9700 - Corporate","lastLoginBy":"thamilton","email":"thamilton@ars.com","userName":"Taylor Hamilton","jobTitle":"Recruiter"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-1703","assetName":"L5CG3201VYK","ciType":"Laptop","product":"HP EliteBook 1040 14 inch G9 Notebook PC","location":"9700 - Corporate","lastLoginBy":"JBarsky","email":"jbarsky@ars.com","userName":"Jessie Barsky","jobTitle":"Field IT Analyst"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16145","assetName":"L2MQ5401LGN","ciType":"Laptop","product":"HP EliteBook 8 G1i 14 inch Notebook AI PC","location":"9700 - Corporate","lastLoginBy":"defaultuser0","email":"fkhan@ars.com","userName":"Faisal Khan","jobTitle":"Field IT Analyst"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-16883","assetName":"L2MQ5280JPW","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9700 - Corporate","lastLoginBy":"SSlyter","email":"sslyter@ars.com","userName":"Stuart Slyter","jobTitle":"Recruiter"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-1680","assetName":"L5CG3040F8Q","ciType":"Laptop","product":"HP EliteBook 840 14 inch G9 Notebook PC","location":"9700 - Corporate","lastLoginBy":"tminnis","email":"tminnis@ars.com","userName":"Teresa Minnis","jobTitle":"Accounts Payable Supvr"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-3128","assetName":"L5CG3232R9Y","ciType":"Laptop","product":"HP Elite x360 1040 14 inch G10 2-in-1 Notebook PC","location":"9700 - Corporate","lastLoginBy":"msamma","email":"msamma@ars.com","userName":"Murtaza Samma","jobTitle":"Field IT Analyst"},{"target":"Not Encrypted","status":"","notes":"","id":"Asset-11686","assetName":"L2MQ5070V08","ciType":"Laptop","product":"HP EliteBook 840 14 inch G11 Notebook PC","location":"9700 - Corporate","lastLoginBy":"IJustiniano.2","email":"ijustiniano@ars.com","userName":"Ismael Justiniano","jobTitle":"Field IT Analyst"}]
+;
+
+// State: { [id]: { done: bool, notes: string, status: string } }
+let state = {};
+
+function loadState() {
+  try {
+    const s = localStorage.getItem('targets_tracker_v2');
+    if (s) state = JSON.parse(s);
+  } catch(e) {}
+  // Seed from spreadsheet notes
+  RAW_DATA.forEach(row => {
+    if (!state[row.id]) {
+      state[row.id] = {
+        done: row.status === 'updated',
+        notes: row.notes || '',
+        status: row.status || ''
+      };
+    }
+  });
+}
+
+function saveState() {
+  localStorage.setItem('targets_tracker_v2', JSON.stringify(state));
+  const ind = document.getElementById('saveIndicator');
+  ind.classList.add('show');
+  clearTimeout(ind._t);
+  ind._t = setTimeout(() => ind.classList.remove('show'), 1500);
+}
+
+function targetBadgeClass(t) {
+  if (t === '2025 Replace') return 'badge-replace';
+  if (t === '23H2 Update') return 'badge-23h2';
+  if (t === 'CMG Version') return 'badge-cmg';
+  if (t === 'Not Encrypted') return 'badge-encrypt';
+  return '';
+}
+function ciClass(ci) {
+  const c = (ci||'').toLowerCase();
+  if (c === 'laptop') return 'ci-laptop';
+  if (c === 'desktop') return 'ci-desktop';
+  return 'ci-other';
+}
+
+function getFilters() {
+  return {
+    branch: document.getElementById('branchFilter').value,
+    target: document.getElementById('targetFilter').value,
+    status: document.getElementById('statusFilter').value,
+    search: document.getElementById('searchBox').value.toLowerCase().trim()
+  };
+}
+
+function filterData() {
+  const f = getFilters();
+  return RAW_DATA.filter(row => {
+    if (f.branch && row.location !== f.branch) return false;
+    if (f.target && row.target !== f.target) return false;
+    const isDone = state[row.id]?.done;
+    if (f.status === 'done' && !isDone) return false;
+    if (f.status === 'pending' && isDone) return false;
+    if (f.search) {
+      const hay = [row.assetName, row.id, row.userName, row.email, row.location, row.product, row.jobTitle]
+        .join(' ').toLowerCase();
+      if (!hay.includes(f.search)) return false;
+    }
+    return true;
+  });
+}
+
+function groupByBranch(rows) {
+  const groups = {};
+  rows.forEach(r => {
+    const loc = r.location || 'Unknown';
+    if (!groups[loc]) groups[loc] = [];
+    groups[loc].push(r);
+  });
+  return groups;
+}
+
+let collapseState = {};
+
+function render() {
+  const filtered = filterData();
+  const groups = groupByBranch(filtered);
+  const main = document.getElementById('mainContent');
+  const noRes = document.getElementById('noResults');
+
+  updateGlobalStats();
+
+  if (filtered.length === 0) {
+    main.innerHTML = '';
+    main.appendChild(noRes);
+    noRes.style.display = 'block';
+    return;
+  }
+  noRes.style.display = 'none';
+
+  const sortedBranches = Object.keys(groups).sort();
+  const frag = document.createDocumentFragment();
+
+  sortedBranches.forEach(branch => {
+    const rows = groups[branch];
+    const doneCount = rows.filter(r => state[r.id]?.done).length;
+    const pct = rows.length > 0 ? Math.round(doneCount / rows.length * 100) : 0;
+    const isCollapsed = collapseState[branch] === true;
+
+    const section = document.createElement('div');
+    section.className = 'branch-section';
+    section.dataset.branch = branch;
+
+    section.innerHTML = `
+      <div class="branch-header ${isCollapsed ? 'collapsed' : ''}" onclick="toggleBranch('${branch.replace(/'/g,"\\'")}', this)">
+        <span class="branch-title">${branch}</span>
+        <span class="branch-count">${rows.length} item${rows.length !== 1 ? 's' : ''}</span>
+        <div class="branch-progress">
+          <div class="progress-bar-wrap" style="width:120px">
+            <div class="progress-bar-fill" style="width:${pct}%"></div>
+          </div>
+          <span class="branch-done-pct">${doneCount}/${rows.length} (${pct}%)</span>
+        </div>
+        <span class="collapse-icon">&#9660;</span>
+      </div>
+      <div class="branch-table-wrap ${isCollapsed ? 'hidden' : ''}">
+        <table>
+          <thead>
+            <tr>
+              <th>Done</th>
+              <th>Target</th>
+              <th>Asset</th>
+              <th>Type</th>
+              <th>User</th>
+              <th>Job Title</th>
+              <th>Product</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => rowHtml(r)).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+    frag.appendChild(section);
+  });
+
+  main.innerHTML = '';
+  main.appendChild(noRes);
+  main.appendChild(frag);
+}
+
+function rowHtml(r) {
+  const s = state[r.id] || {};
+  const isDone = s.done;
+  const notes = s.notes || '';
+  return `
+    <tr class="${isDone ? 'done-row' : ''}" data-id="${r.id}">
+      <td><input type="checkbox" class="done-check" ${isDone ? 'checked' : ''} onchange="toggleDone('${r.id}', this)"></td>
+      <td><span class="target-badge ${targetBadgeClass(r.target)}">${r.target}</span></td>
+      <td>
+        <div class="asset-name">${r.assetName}</div>
+        <div class="asset-id">${r.id}</div>
+      </td>
+      <td><span class="ci-type ${ciClass(r.ciType)}">${r.ciType||'—'}</span></td>
+      <td>
+        <div class="user-name">${r.userName||'—'}</div>
+        <div class="user-email">${r.email||r.lastLoginBy||''}</div>
+      </td>
+      <td>${r.jobTitle||'—'}</td>
+      <td style="max-width:180px;font-size:0.78rem;color:#64748b">${r.product||'—'}</td>
+      <td class="notes-cell">
+        <div class="note-display ${notes ? '' : 'empty'}" onclick="openNoteEdit('${r.id}', this)">${escHtml(notes)}</div>
+        <div class="note-edit-wrap" id="noteWrap_${r.id}">
+          <textarea class="note-textarea" id="noteTA_${r.id}" rows="3">${escHtml(notes)}</textarea>
+          <div class="note-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveNote('${r.id}')">Save</button>
+            <button class="btn btn-outline btn-sm" onclick="cancelNote('${r.id}')">Cancel</button>
+          </div>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toggleBranch(branch, headerEl) {
+  collapseState[branch] = !collapseState[branch];
+  headerEl.classList.toggle('collapsed');
+  const wrap = headerEl.nextElementSibling;
+  wrap.classList.toggle('hidden');
+}
+
+function toggleDone(id, cb) {
+  if (!state[id]) state[id] = {};
+  state[id].done = cb.checked;
+  saveState();
+  const row = cb.closest('tr');
+  row.classList.toggle('done-row', cb.checked);
+  // Update branch progress
+  updateBranchProgress(row);
+  updateGlobalStats();
+}
+
+function updateBranchProgress(row) {
+  const section = row.closest('.branch-section');
+  if (!section) return;
+  const branch = section.dataset.branch;
+  const trs = section.querySelectorAll('tbody tr');
+  const total = trs.length;
+  const done = [...trs].filter(tr => tr.querySelector('.done-check')?.checked).length;
+  const pct = total > 0 ? Math.round(done / total * 100) : 0;
+  const bar = section.querySelector('.progress-bar-fill');
+  if (bar) bar.style.width = pct + '%';
+  const lbl = section.querySelector('.branch-done-pct');
+  if (lbl) lbl.textContent = `${done}/${total} (${pct}%)`;
+}
+
+function openNoteEdit(id, displayEl) {
+  // Close any other open editors
+  document.querySelectorAll('.note-edit-wrap.active').forEach(w => {
+    const wid = w.id.replace('noteWrap_','');
+    cancelNote(wid, true);
+  });
+  displayEl.style.display = 'none';
+  const wrap = document.getElementById('noteWrap_' + id);
+  wrap.classList.add('active');
+  wrap.querySelector('textarea').focus();
+}
+
+function saveNote(id) {
+  const ta = document.getElementById('noteTA_' + id);
+  const val = ta.value;
+  if (!state[id]) state[id] = {};
+  state[id].notes = val;
+  saveState();
+
+  const wrap = document.getElementById('noteWrap_' + id);
+  wrap.classList.remove('active');
+  const row = wrap.closest('tr');
+  const display = row.querySelector('.note-display');
+  display.style.display = '';
+  display.innerHTML = escHtml(val);
+  display.classList.toggle('empty', !val);
+}
+
+function cancelNote(id, silent) {
+  const wrap = document.getElementById('noteWrap_' + id);
+  if (!wrap) return;
+  wrap.classList.remove('active');
+  const row = wrap.closest('tr');
+  if (!row) return;
+  const display = row.querySelector('.note-display');
+  if (display) display.style.display = '';
+  // Reset textarea to saved value
+  const ta = document.getElementById('noteTA_' + id);
+  if (ta) ta.value = state[id]?.notes || '';
+}
+
+function updateGlobalStats() {
+  const filtered = filterData();
+  const total = filtered.length;
+  const done = filtered.filter(r => state[r.id]?.done).length;
+  const rem = total - done;
+  const pct = total > 0 ? Math.round(done / total * 100) : 0;
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statDone').textContent = done;
+  document.getElementById('statRemaining').textContent = rem;
+  document.getElementById('statPct').textContent = pct + '%';
+  document.getElementById('globalBar').style.width = pct + '%';
+}
+
+function populateBranchDropdown() {
+  const sel = document.getElementById('branchFilter');
+  const locations = [...new Set(RAW_DATA.map(r => r.location).filter(Boolean))].sort();
+  locations.forEach(loc => {
+    const opt = document.createElement('option');
+    opt.value = loc;
+    opt.textContent = loc;
+    sel.appendChild(opt);
+  });
+}
+
+function clearAllFilters() {
+  document.getElementById('branchFilter').value = '';
+  document.getElementById('targetFilter').value = '';
+  document.getElementById('statusFilter').value = '';
+  document.getElementById('searchBox').value = '';
+  render();
+}
+
+function exportNotes() {
+  const lines = ['ID,Asset Name,Target,Branch,User,Notes,Done'];
+  RAW_DATA.forEach(r => {
+    const s = state[r.id] || {};
+    const notes = (s.notes || '').replace(/"/g, '""');
+    lines.push(`"${r.id}","${r.assetName}","${r.target}","${r.location}","${r.userName||''}","${notes}","${s.done ? 'Yes' : 'No'}"`);
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'targets_notes_export.csv';
+  a.click();
+}
+
+// Wire up filters
+['branchFilter','targetFilter','statusFilter'].forEach(id =>
+  document.getElementById(id).addEventListener('change', render)
+);
+let searchTimer;
+document.getElementById('searchBox').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(render, 250);
+});
+
+// Init
+loadState();
+populateBranchDropdown();
+render();
+</script>
+</body>
+</html>
