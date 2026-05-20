@@ -1,0 +1,3840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Computer Inventory Report</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         font-size: 13px; background: #f0f2f5; color: #1a1a2e; }
+  header { background: #1a1a2e; color: #fff; padding: 16px 24px;
+            display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  header span { font-size: 11px; opacity: 0.6; }
+
+  .summary { display: flex; gap: 12px; padding: 16px 24px; flex-wrap: wrap; }
+  .card { background: #fff; border-radius: 8px; padding: 12px 18px;
+           min-width: 130px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .card .num { font-size: 26px; font-weight: 700; }
+  .card .lbl { font-size: 11px; color: #666; margin-top: 2px; }
+  .card.red .num { color: #d32f2f; }
+  .card.orange .num { color: #e65100; }
+  .card.yellow .num { color: #f9a825; }
+  .card.gray .num { color: #555; }
+
+  .toolbar { padding: 0 24px 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .toolbar input { padding: 7px 12px; border: 1px solid #ccc; border-radius: 6px;
+                    font-size: 13px; width: 280px; }
+  .toolbar select { padding: 7px 10px; border: 1px solid #ccc; border-radius: 6px;
+                     font-size: 13px; }
+  .toolbar label { font-size: 12px; color: #555; }
+
+  .wrap { padding: 0 24px 32px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; background: #fff;
+           border-radius: 8px; overflow: hidden;
+           box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  th { background: #1a1a2e; color: #fff; padding: 10px 10px; text-align: left;
+        font-weight: 600; font-size: 12px; white-space: nowrap;
+        cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 2; }
+  th:hover { background: #2d2d4e; }
+  th .sort-icon { margin-left: 4px; opacity: 0.5; }
+  th.asc .sort-icon::after { content: " ▲"; }
+  th.desc .sort-icon::after { content: " ▼"; }
+  th:not(.asc):not(.desc) .sort-icon::after { content: " ⇅"; }
+
+  td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: middle;
+        white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(0,0,0,.02); }
+
+  tr.inactive-user td { background: #fdecea; }
+  tr.inactive-user:hover td { background: #fcd8d5; }
+  tr.unknown-user td { background: #fff8e1; }
+  tr.unknown-user:hover td { background: #fff0c0; }
+  tr.inactive-device td { background: #fff3e0; }
+  tr.stale td { background: #f3f8ff; }
+
+  td.bool { text-align: center; font-weight: 600; font-size: 12px; }
+  td.bool.yes { color: #2e7d32; }
+  td.bool.no { color: #c62828; }
+  td.bool.na { color: #888; }
+  td.stale-cell { color: #e65100; font-weight: 600; }
+
+  .legend { display: flex; gap: 12px; padding: 0 24px 16px; flex-wrap: wrap; font-size: 11px; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+
+  #row-count { font-size: 12px; color: #555; padding: 0 24px 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Computer Inventory Report</h1>
+  <span>Source: 94b2725f-Targets.xlsx &nbsp;|&nbsp; Generated: 2026-05-20 12:46</span>
+</header>
+
+<div class="summary">
+  <div class="card gray"><div class="num">260</div><div class="lbl">Total Devices</div></div>
+  <div class="card red"><div class="num">1</div><div class="lbl">Inactive User</div></div>
+  <div class="card yellow"><div class="num">93</div><div class="lbl">User Unknown / N/A</div></div>
+  <div class="card orange"><div class="num">28</div><div class="lbl">Stale (&gt;90d)</div></div>
+</div>
+
+<div class="toolbar">
+  <input type="text" id="search" placeholder="Search asset, user, email, location...">
+  <label>User Active:
+    <select id="filter-user">
+      <option value="">All</option>
+      <option value="Yes">Yes</option>
+      <option value="No">No</option>
+      <option value="N/A">N/A</option>
+    </select>
+  </label>
+  <label>Device Active in AD:
+    <select id="filter-device">
+      <option value="">All</option>
+      <option value="Yes">Yes</option>
+      <option value="No">No</option>
+    </select>
+  </label>
+  <label>Show only stale (&gt;90d):
+    <input type="checkbox" id="filter-stale">
+  </label>
+</div>
+<div id="row-count"></div>
+
+<div class="legend">
+  <span><span class="swatch" style="background:#fdecea"></span> Inactive User</span>
+  <span><span class="swatch" style="background:#fff8e1"></span> User Unknown/N/A</span>
+  <span><span class="swatch" style="background:#fff3e0"></span> Inactive Device in AD</span>
+  <span><span class="swatch" style="background:#f3f8ff"></span> Stale (&gt;90d no audit/logon)</span>
+  <span style="color:#e65100; font-weight:600">Orange date = stale</span>
+</div>
+
+<div class="wrap">
+<table id="tbl">
+  <thead>
+    <tr>
+      <th data-col="0">Asset Name<span class="sort-icon"></span></th>
+      <th data-col="1">Used By Name<span class="sort-icon"></span></th>
+      <th data-col="2">Email<span class="sort-icon"></span></th>
+      <th data-col="3">Job Title<span class="sort-icon"></span></th>
+      <th data-col="4">Location<span class="sort-icon"></span></th>
+      <th data-col="5">User Active<span class="sort-icon"></span></th>
+      <th data-col="6">Device Active in AD<span class="sort-icon"></span></th>
+      <th data-col="7">Last Audit Date<span class="sort-icon"></span></th>
+      <th data-col="8">Last Updated Date<span class="sort-icon"></span></th>
+      <th data-col="9">AD whenChanged<span class="sort-icon"></span></th>
+      <th data-col="10">AD LastLogonDate<span class="sort-icon"></span></th>
+    </tr>
+  </thead>
+  <tbody id="tbody">
+
+        <tr class="">
+          <td>L5CG1141M3B</td>
+          <td>Cheyenne Brooks</td>
+          <td>chbrooks@ars.com</td>
+          <td>Cust Service Spc</td>
+          <td>8299 - Houston Call Center</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-16</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+          <td>2026-04-28</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG1287JJC</td>
+          <td>Dotan Amir</td>
+          <td>damir@ars.com</td>
+          <td>HVAC Sales Manager</td>
+          <td>8378 - ARS of Illinois</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-11</td>
+          <td>2026-05-11</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL1503WPJ</td>
+          <td>Althia Franklyn</td>
+          <td>afranklyn@ars.com</td>
+          <td>Dispatcher</td>
+          <td>8551 - ARS of Laurel</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-11</td>
+          <td>2026-05-10</td>
+          <td>2026-05-05</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG1195NWX</td>
+          <td>Kenneth Dickinson</td>
+          <td>kdickinson@bluedotmd.com</td>
+          <td>Division Safety Manager</td>
+          <td>8554 - Blue Dot</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG2028TF8</td>
+          <td>Jose Depablos</td>
+          <td>jdepablos@ars.com</td>
+          <td>Inside Sales Rep</td>
+          <td>8876 - ARS of Raleigh</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-06</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG14053SS</td>
+          <td>Nathanael Craven</td>
+          <td>ncraven@ars.com</td>
+          <td>Sales Coordinator</td>
+          <td>8877 - ARS of Durham</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+          <td>2026-05-09</td>
+          <td>2026-05-09</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL1462WVT</td>
+          <td>Crystal Young</td>
+          <td>cryoung@ars.com</td>
+          <td>Accounts Payable Spc</td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL0093XSY</td>
+          <td></td>
+          <td>ARSBadges@ars.com</td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-06</td>
+          <td>2026-05-06</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMJ009UPW</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-09-29</td>
+          <td>2026-04-16</td>
+          <td>2025-09-28</td>
+          <td class="stale-cell">2025-09-28</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG1476YLR</td>
+          <td>Samuel Alexander</td>
+          <td>salexander@ars.com</td>
+          <td>Division Safety Manager</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-07</td>
+          <td>2026-05-08</td>
+          <td>2026-05-03</td>
+          <td>2026-05-03</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG0178CCZ</td>
+          <td>Carlos HernandezDiaz</td>
+          <td>chernandezdiaz@theyesmancan.com</td>
+          <td>Recruiter</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-04</td>
+          <td>2026-05-03</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL3312MFZ</td>
+          <td>Elias Cortes</td>
+          <td>ecortes@ars.com</td>
+          <td>Warehouse Specialist</td>
+          <td>8107 - RR of San Diego</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-11</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3040F7Q</td>
+          <td>Ronald Alcazar</td>
+          <td>ralcazar@rightimeservices.com</td>
+          <td>Install Supervisor</td>
+          <td>8120 - RighTime Riverside</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-06</td>
+          <td>2026-05-06</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG2403YW2</td>
+          <td>Norma Mayes</td>
+          <td>nmayes@beutler.com</td>
+          <td>Accounting Supervisor</td>
+          <td>8130 - Beutler AC Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-06</td>
+          <td>2026-05-06</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150MT1</td>
+          <td>Lara Francecisco</td>
+          <td>lfrancecisco@ars.com</td>
+          <td>Dispatcher</td>
+          <td>8130 - Beutler AC Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-09</td>
+          <td>2026-05-09</td>
+          <td>2026-05-04</td>
+          <td>2026-05-04</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZRD</td>
+          <td>Savannah Pedrini</td>
+          <td>spedrini@ars.com</td>
+          <td>Scheduler</td>
+          <td>8130 - Beutler AC Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-26</td>
+          <td>2026-04-26</td>
+          <td>2026-04-25</td>
+          <td>2026-04-25</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ43107CM</td>
+          <td>Jonathan Karl</td>
+          <td>jkarl@beutler.com</td>
+          <td>Sales Coordinator</td>
+          <td>8130 - Beutler AC Services</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-11-21</td>
+          <td>2026-04-10</td>
+          <td>2026-04-03</td>
+          <td>2026-04-03</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG315106S</td>
+          <td>Diane Franco</td>
+          <td>dfranco@ars.com</td>
+          <td>Sales Coordinator</td>
+          <td>8130 - Beutler AC Services</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-04</td>
+          <td>2026-04-10</td>
+          <td>2026-03-03</td>
+          <td>2026-03-03</td>
+        </tr>
+
+        <tr class="stale">
+          <td>LC2L34200WJ</td>
+          <td>Esperanza Woolever</td>
+          <td>ewoolever@ars.com</td>
+          <td>Reg StrategicAlliance Mgr</td>
+          <td>8130 - Beutler AC Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-02-12</td>
+          <td>2026-04-09</td>
+          <td>2026-02-09</td>
+          <td class="stale-cell">2026-02-09</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ43107CF</td>
+          <td>Steven Lepas</td>
+          <td>slepas@atlastrillo.com</td>
+          <td>HR Manager</td>
+          <td>8131 - Atlas Trillo</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-04</td>
+          <td>2026-04-09</td>
+          <td>2026-03-04</td>
+          <td>2026-03-04</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5091029</td>
+          <td>Matthew Kohle</td>
+          <td>mkohle@ars.com</td>
+          <td>AOR Installation Supvr</td>
+          <td>8153 - ARS of Colorado</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-11</td>
+          <td>2026-05-06</td>
+          <td>2026-05-06</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG315106V</td>
+          <td>Carrie Mack</td>
+          <td>cmack@ars.com</td>
+          <td>Lowes Program Manager</td>
+          <td>8153 - ARS of Colorado</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-11</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG33904V9</td>
+          <td>Alfredo QuinteroChiu</td>
+          <td>aquintero@ars.com</td>
+          <td>General Manager</td>
+          <td>8253 - ARS of Miami</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+          <td>2026-04-27</td>
+          <td>2026-04-27</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150MVF</td>
+          <td>Destiny Scott</td>
+          <td>dscott@floridahomeac.com</td>
+          <td>Dispatcher</td>
+          <td>8277 - Florida Home AC</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-09</td>
+          <td>2026-05-09</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG315105N</td>
+          <td>Myrhdyll Sande</td>
+          <td>mysande@floridahomeac.com</td>
+          <td>AOR Helper</td>
+          <td>8277 - Florida Home AC</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-01</td>
+          <td>2026-04-11</td>
+          <td>2026-03-19</td>
+          <td>2026-03-19</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZK6</td>
+          <td>Ketura Heyward</td>
+          <td>kheyward@ars.com</td>
+          <td>Dispatcher</td>
+          <td>8281 - ARS of Orlando</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-09</td>
+          <td>2026-04-09</td>
+          <td>2026-02-27</td>
+          <td>2026-02-27</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3150MV4</td>
+          <td>Michael Prosper</td>
+          <td>mprosper@ars.com</td>
+          <td>Lowes Program Manager</td>
+          <td>8281 - ARS of Orlando</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-03</td>
+          <td>2026-04-10</td>
+          <td>2025-11-10</td>
+          <td class="stale-cell">2025-11-10</td>
+        </tr>
+
+        <tr class="stale">
+          <td>L5CG3150ZKH</td>
+          <td>Joshua Woody</td>
+          <td>jwoody@ars.com</td>
+          <td>Plumbing Service Manager</td>
+          <td>8302 - Allgood Home Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-02-13</td>
+          <td>2026-04-09</td>
+          <td>2026-02-24</td>
+          <td>2026-02-24</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3293CLJ</td>
+          <td>Christian Rowe</td>
+          <td>crowe@ars.com</td>
+          <td>Dispatcher</td>
+          <td>8302 - Allgood Home Services</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-22</td>
+          <td>2026-04-10</td>
+          <td>2026-02-15</td>
+          <td class="stale-cell">2026-02-15</td>
+        </tr>
+
+        <tr class="stale">
+          <td>L5CG3150ZK0</td>
+          <td>Caelib Smith</td>
+          <td>cjsmith@ars.com</td>
+          <td>Dispatcher</td>
+          <td>8302 - Allgood Home Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-20</td>
+          <td>2026-04-10</td>
+          <td>2026-02-21</td>
+          <td class="stale-cell">2026-02-13</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5280LGN</td>
+          <td>Frank Spaid</td>
+          <td>fspaid@ars.com</td>
+          <td>Warehouse Inventory Manager</td>
+          <td>8404 - ARS of Indianapolis</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-11</td>
+          <td>2026-05-11</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150MTB</td>
+          <td>Jayde Roe</td>
+          <td>jthornton@ars.com</td>
+          <td>Dispatcher</td>
+          <td>8404 - ARS of Indianapolis</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL5093R0B</td>
+          <td>8425DisplayUser User</td>
+          <td>8425displayuser@ars.com</td>
+          <td></td>
+          <td>8425 - Hamilton</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-05</td>
+          <td>2026-05-05</td>
+          <td>2026-03-05</td>
+          <td>2026-03-05</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ43107CC</td>
+          <td>Tamika Loney</td>
+          <td>tloney@bluedotmd.com</td>
+          <td>Quality Assurance Manager</td>
+          <td>8554 - Blue Dot</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-03</td>
+          <td>2026-04-09</td>
+          <td>2026-03-02</td>
+          <td>2026-03-02</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150MSM</td>
+          <td>Rachel Stauffer</td>
+          <td>rstauffer@ars.com</td>
+          <td>Customer Care Coord</td>
+          <td>8554 - Blue Dot</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-23</td>
+          <td>2026-04-09</td>
+          <td>2026-02-23</td>
+          <td>2026-02-23</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150MTQ</td>
+          <td>Jim Lowes</td>
+          <td>jlowes@ars.com</td>
+          <td>Warehouse Helper</td>
+          <td>8603 - ARS of Detroit</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-11</td>
+          <td>2026-05-06</td>
+          <td>2026-05-06</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL3192F6H</td>
+          <td>Bowen Brady</td>
+          <td>bbrady@ars.com</td>
+          <td>Sales Coordinator</td>
+          <td>8603 - ARS of Detroit</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-09</td>
+          <td>2026-05-09</td>
+          <td>2026-05-02</td>
+          <td>2026-05-02</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ5070V4S</td>
+          <td>Aaron Franklin</td>
+          <td>afranklin@ars.com</td>
+          <td>Weekly Plumb Repair Spec</td>
+          <td>8876 - ARS of Raleigh</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-10-17</td>
+          <td>2026-04-16</td>
+          <td>2026-03-16</td>
+          <td>2026-03-16</td>
+        </tr>
+
+        <tr class="stale">
+          <td>L5CG3150MT2</td>
+          <td>Brian Hammett</td>
+          <td>bhammett@ars.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>8880 - ARS of Wilmington</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-23</td>
+          <td>2026-04-11</td>
+          <td>2026-02-24</td>
+          <td class="stale-cell">2026-02-17</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3040FFD</td>
+          <td>Jason Dorsey</td>
+          <td>jdorsey@ars.com</td>
+          <td>Weekly Commercial Acct Rp</td>
+          <td>8927 - RR of Cleveland</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+          <td>2026-04-23</td>
+          <td>2026-04-23</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZRG</td>
+          <td>John Conti</td>
+          <td>jconti@ars.com</td>
+          <td>Weekly Commercial Acct Rp</td>
+          <td>8927 - RR of Cleveland</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-15</td>
+          <td>2026-04-15</td>
+          <td>2026-04-15</td>
+          <td>2026-04-15</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5280JQP</td>
+          <td>Matthew Sarrio</td>
+          <td>msarrio@ars.com</td>
+          <td>HVAC AOR Sales Rep</td>
+          <td>9055 - ARS of Myrtle Beach</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+          <td>2026-05-07</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ44608VM</td>
+          <td>Bradley Stanley</td>
+          <td>bstanley@ars.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>9055 - ARS of Myrtle Beach</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-16</td>
+          <td>2026-04-09</td>
+          <td>2026-03-17</td>
+          <td>2026-03-17</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZL8</td>
+          <td>Martin Metodiev</td>
+          <td>mmetodiev@brotherair.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>9062 - Brother&#x27;s</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-06</td>
+          <td>2026-05-07</td>
+          <td>2026-05-04</td>
+          <td>2026-05-04</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZDL</td>
+          <td>Jessica Contreras</td>
+          <td>jeslopez@brotherair.com</td>
+          <td>Scheduler</td>
+          <td>9062 - Brother&#x27;s</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-16</td>
+          <td>2026-04-09</td>
+          <td>2026-04-28</td>
+          <td>2026-04-28</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3151017</td>
+          <td>Rikki McDaniel</td>
+          <td>rmcdaniel@conwayservices.net</td>
+          <td>Scheduler</td>
+          <td>9106 - Conway Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-07</td>
+          <td>2026-05-08</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3151019</td>
+          <td>Raishawn Morris</td>
+          <td>rmorris@ars.com</td>
+          <td>Safety Manager</td>
+          <td>9131 - ARS of Houston</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG315102B</td>
+          <td>Estella Uribe</td>
+          <td>euribe@ars.com</td>
+          <td>HR Manager</td>
+          <td>9131 - ARS of Houston</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-24</td>
+          <td>2026-04-09</td>
+          <td>2026-03-22</td>
+          <td>2026-03-22</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG315101N</td>
+          <td>Brooklynn Hilton</td>
+          <td>bhilton@ars.com</td>
+          <td>Scheduler</td>
+          <td>9133 - ARS of San Antonio</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-24</td>
+          <td>2026-04-24</td>
+          <td>2026-04-15</td>
+          <td>2026-04-15</td>
+        </tr>
+
+        <tr class="stale">
+          <td>LC2L34200XC</td>
+          <td>Matthew Oyler</td>
+          <td>moyler@theyesmancan.com</td>
+          <td>SM - Comfort Advisor</td>
+          <td>9153 - Yes! Utah</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-20</td>
+          <td>2026-04-20</td>
+          <td>2025-10-23</td>
+          <td class="stale-cell">2025-10-20</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZF7</td>
+          <td>Hemant Gurung</td>
+          <td>hgurung@mccarthyservice.com</td>
+          <td>Accounts Payable Clerk</td>
+          <td>9202 - McCarthy Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+          <td>2026-05-04</td>
+          <td>2026-05-04</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5070Y0N</td>
+          <td>Keisy Chisley</td>
+          <td>kchisley@yourtotalcomfort.com</td>
+          <td>Dispatcher</td>
+          <td>9207 - Total Comfort</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-11</td>
+          <td>2026-05-04</td>
+          <td>2026-05-04</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5090YWD</td>
+          <td>Ryan Tubbs</td>
+          <td>rtubbs@ars.com</td>
+          <td>Weekly Plumb Repair Spec</td>
+          <td>9226 - RR of Seattle</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-04</td>
+          <td>2026-05-04</td>
+          <td>2026-04-28</td>
+          <td>2026-04-28</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ43107BZ</td>
+          <td>Sonia Gonzalez</td>
+          <td>scgonzalez@ars.com</td>
+          <td>Dispatcher</td>
+          <td>9228 - Blue Flame Heating &amp;Air</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-11</td>
+          <td>2026-04-11</td>
+          <td>2026-04-11</td>
+          <td>2026-04-03</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>LC2L34200XF</td>
+          <td>Conner Chambers</td>
+          <td>crchambers@blueflamecomfort.com</td>
+          <td>AOR Installation Tech</td>
+          <td>9228 - Blue Flame Heating &amp;Air</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-12-12</td>
+          <td>2026-04-10</td>
+          <td>2026-03-24</td>
+          <td>2026-03-24</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3313H5G</td>
+          <td>Bradley Ruddell</td>
+          <td>bruddell@ars.com</td>
+          <td>AOR Installation Manager</td>
+          <td>9228 - Blue Flame Heating &amp;Air</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-02</td>
+          <td>2026-04-09</td>
+          <td>2026-02-26</td>
+          <td>2026-02-26</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ50804XS</td>
+          <td>Rob Darling</td>
+          <td>rdarling@ars.com</td>
+          <td>Consultant</td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-30</td>
+          <td>2026-04-09</td>
+          <td>2026-04-27</td>
+          <td>2026-04-27</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL2385D9Z</td>
+          <td>Rami Seelam</td>
+          <td>rseelam@ars.com</td>
+          <td>IT Dev Software Architect</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-01</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3313B47</td>
+          <td>Steven Chapman</td>
+          <td>swchapman@ars.com</td>
+          <td>Systems Engineer</td>
+          <td>9700 - Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+        </tr>
+
+        <tr class="stale">
+          <td>L5CG3040FG0</td>
+          <td>Mario Rodriguez</td>
+          <td>mrodriguez@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-19</td>
+          <td>2026-04-09</td>
+          <td>2026-02-17</td>
+          <td class="stale-cell">2026-02-17</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3313H5H</td>
+          <td>Kevin Bartell</td>
+          <td>kbartell@ars.com</td>
+          <td>Lowes Program Manager</td>
+          <td>8107 - RR of San Diego</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+          <td>2026-04-27</td>
+          <td>2026-04-27</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3313H60</td>
+          <td>Jace Menard</td>
+          <td>jmenard@ars.com</td>
+          <td>Operations Manager</td>
+          <td>8107 - RR of San Diego</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-02-02</td>
+          <td>2026-04-09</td>
+          <td>2026-04-13</td>
+          <td>2026-04-13</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3313H63</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>8120 - RighTime Riverside</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-25</td>
+          <td>2026-04-09</td>
+          <td>2026-03-25</td>
+          <td>2026-03-25</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>LC2L34200XL</td>
+          <td>Jose Valencia</td>
+          <td>jvalencia@ars.com</td>
+          <td>Plumbing Service Manager</td>
+          <td>8120 - RighTime Riverside</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-27</td>
+          <td>2026-04-10</td>
+          <td>2026-02-27</td>
+          <td>2026-02-27</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ43107BT</td>
+          <td>Chad Kerr</td>
+          <td>ckerr@ars.com</td>
+          <td>General Manager</td>
+          <td>8120 - RighTime Riverside</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-10-20</td>
+          <td>2026-04-10</td>
+          <td>2026-02-18</td>
+          <td>2026-02-18</td>
+        </tr>
+
+        <tr class="stale">
+          <td>DMXL30120DV</td>
+          <td>8120 Display</td>
+          <td>8120display@ars.com</td>
+          <td></td>
+          <td>8120 - RighTime Riverside</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-02-18</td>
+          <td>2026-04-16</td>
+          <td>2026-02-08</td>
+          <td class="stale-cell">2026-02-08</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150MT1</td>
+          <td>Lara Francecisco</td>
+          <td>lfrancecisco@ars.com</td>
+          <td>Dispatcher</td>
+          <td>8130 - Beutler AC Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-09</td>
+          <td>2026-05-09</td>
+          <td>2026-05-04</td>
+          <td>2026-05-04</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ43107CM</td>
+          <td>Jonathan Karl</td>
+          <td>jkarl@beutler.com</td>
+          <td>Sales Coordinator</td>
+          <td>8130 - Beutler AC Services</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-11-21</td>
+          <td>2026-04-10</td>
+          <td>2026-04-03</td>
+          <td>2026-04-03</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG315106S</td>
+          <td>Diane Franco</td>
+          <td>dfranco@ars.com</td>
+          <td>Sales Coordinator</td>
+          <td>8130 - Beutler AC Services</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-04</td>
+          <td>2026-04-10</td>
+          <td>2026-03-03</td>
+          <td>2026-03-03</td>
+        </tr>
+
+        <tr class="stale">
+          <td>LC2L34200WJ</td>
+          <td>Esperanza Woolever</td>
+          <td>ewoolever@ars.com</td>
+          <td>Reg StrategicAlliance Mgr</td>
+          <td>8130 - Beutler AC Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-02-12</td>
+          <td>2026-04-09</td>
+          <td>2026-02-09</td>
+          <td class="stale-cell">2026-02-09</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150MTL</td>
+          <td>Angelina Rodriguez</td>
+          <td>angrodriguez@ars.com</td>
+          <td>Accounting Clerk</td>
+          <td>8131 - Atlas Trillo</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ43107CF</td>
+          <td>Steven Lepas</td>
+          <td>slepas@atlastrillo.com</td>
+          <td>HR Manager</td>
+          <td>8131 - Atlas Trillo</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-04</td>
+          <td>2026-04-09</td>
+          <td>2026-03-04</td>
+          <td>2026-03-04</td>
+        </tr>
+
+        <tr class="stale">
+          <td>L5CG3232RBB</td>
+          <td>Benjamin Romero</td>
+          <td>bromero@atlastrillo.com</td>
+          <td>HD Program Manager</td>
+          <td>8131 - Atlas Trillo</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-02-18</td>
+          <td>2026-04-20</td>
+          <td>2026-02-17</td>
+          <td class="stale-cell">2026-02-17</td>
+        </tr>
+
+        <tr class="stale">
+          <td>L2MQ5070V65</td>
+          <td>Jasson MendizabalJimenez</td>
+          <td>jmendizabaljimenez@atlastrillo.com</td>
+          <td>Plumbing Trainee</td>
+          <td>8131 - Atlas Trillo</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-02-12</td>
+          <td>2026-04-09</td>
+          <td>2026-02-12</td>
+          <td class="stale-cell">2026-02-12</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5091029</td>
+          <td>Matthew Kohle</td>
+          <td>mkohle@ars.com</td>
+          <td>AOR Installation Supvr</td>
+          <td>8153 - ARS of Colorado</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-11</td>
+          <td>2026-05-06</td>
+          <td>2026-05-06</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL5102H6N</td>
+          <td>David Thao</td>
+          <td>dthao@ars.com</td>
+          <td>Dispatcher</td>
+          <td>8153 - ARS of Colorado</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+          <td>2026-04-29</td>
+          <td>2026-04-29</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG315105N</td>
+          <td>Myrhdyll Sande</td>
+          <td>mysande@floridahomeac.com</td>
+          <td>AOR Helper</td>
+          <td>8277 - Florida Home AC</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-01</td>
+          <td>2026-04-11</td>
+          <td>2026-03-19</td>
+          <td>2026-03-19</td>
+        </tr>
+
+        <tr class="stale">
+          <td>DMXL3312MC4</td>
+          <td>Myrhdyll Sande</td>
+          <td>mysande@floridahomeac.com</td>
+          <td>AOR Helper</td>
+          <td>8277 - Florida Home AC</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-02-12</td>
+          <td>2026-04-16</td>
+          <td>2026-02-11</td>
+          <td class="stale-cell">2026-02-11</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZK6</td>
+          <td>Ketura Heyward</td>
+          <td>kheyward@ars.com</td>
+          <td>Dispatcher</td>
+          <td>8281 - ARS of Orlando</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-09</td>
+          <td>2026-04-09</td>
+          <td>2026-02-27</td>
+          <td>2026-02-27</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL5102H75</td>
+          <td>Lesley Pineda</td>
+          <td>lpineda@ars.com</td>
+          <td>Customer Service Rep</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL30120C7</td>
+          <td>Jenaya Messer</td>
+          <td>jreilly@ars.com</td>
+          <td>Customer Service Rep</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-24</td>
+          <td>2026-04-16</td>
+          <td>2026-03-30</td>
+          <td>2026-03-30</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3150ZKY</td>
+          <td>Edward Gall</td>
+          <td>egall@ars.com</td>
+          <td>Plumbing Service Manager</td>
+          <td>8302 - Allgood Home Services</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-11-13</td>
+          <td>2026-04-10</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZRZ</td>
+          <td>Gregory Cruce</td>
+          <td>gcruce@callallgood.com</td>
+          <td>Controller</td>
+          <td>8302 - Allgood Home Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-26</td>
+          <td>2026-04-10</td>
+          <td>2026-02-26</td>
+          <td>2026-02-26</td>
+        </tr>
+
+        <tr class="stale">
+          <td>L5CG3150ZKH</td>
+          <td>Joshua Woody</td>
+          <td>jwoody@ars.com</td>
+          <td>Plumbing Service Manager</td>
+          <td>8302 - Allgood Home Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-02-13</td>
+          <td>2026-04-09</td>
+          <td>2026-02-24</td>
+          <td>2026-02-24</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL3192F5M</td>
+          <td>Calvin Jenkins</td>
+          <td>cjenkins@ars.com</td>
+          <td>Sales Coordinator</td>
+          <td>8302 - Allgood Home Services</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-25</td>
+          <td>2026-04-10</td>
+          <td>2026-02-23</td>
+          <td>2026-02-23</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZRW</td>
+          <td>Scott McCrary</td>
+          <td>smccrary@callallgood.com</td>
+          <td>HVAC Service Supervisor</td>
+          <td>8302 - Allgood Home Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-25</td>
+          <td>2026-04-09</td>
+          <td>2026-02-25</td>
+          <td>2026-02-21</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3293CLJ</td>
+          <td>Christian Rowe</td>
+          <td>crowe@ars.com</td>
+          <td>Dispatcher</td>
+          <td>8302 - Allgood Home Services</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-22</td>
+          <td>2026-04-10</td>
+          <td>2026-02-15</td>
+          <td class="stale-cell">2026-02-15</td>
+        </tr>
+
+        <tr class="stale">
+          <td>L5CG3150ZK0</td>
+          <td>Caelib Smith</td>
+          <td>cjsmith@ars.com</td>
+          <td>Dispatcher</td>
+          <td>8302 - Allgood Home Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-20</td>
+          <td>2026-04-10</td>
+          <td>2026-02-21</td>
+          <td class="stale-cell">2026-02-13</td>
+        </tr>
+
+        <tr class="stale">
+          <td>L2MQ5091041</td>
+          <td>Raymond Anderson</td>
+          <td>rcanderson@callhamilton.com</td>
+          <td>Controller</td>
+          <td>8425 - Hamilton</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-10-28</td>
+          <td>2026-04-10</td>
+          <td>2026-05-04</td>
+          <td>2026-05-04</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL5093R0B</td>
+          <td>8425DisplayUser User</td>
+          <td>8425displayuser@ars.com</td>
+          <td></td>
+          <td>8425 - Hamilton</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-05</td>
+          <td>2026-05-05</td>
+          <td>2026-03-05</td>
+          <td>2026-03-05</td>
+        </tr>
+
+        <tr class="stale">
+          <td>DMXL30120BN</td>
+          <td>8450 DisplayUser</td>
+          <td>8450displayuser@ars.com</td>
+          <td></td>
+          <td>8450 - Comfort Heating and Air</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-01-23</td>
+          <td>2026-05-11</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3040FD8</td>
+          <td>Jacob Ward</td>
+          <td>jaward@ars.com</td>
+          <td>Purchasing Agent</td>
+          <td>8551 - ARS of Laurel</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-02-12</td>
+          <td>2026-04-09</td>
+          <td>2026-02-10</td>
+          <td class="stale-cell">2026-02-10</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150MSM</td>
+          <td>Rachel Stauffer</td>
+          <td>rstauffer@ars.com</td>
+          <td>Customer Care Coord</td>
+          <td>8554 - Blue Dot</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-23</td>
+          <td>2026-04-09</td>
+          <td>2026-02-23</td>
+          <td>2026-02-23</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG2410F00</td>
+          <td>Patrick Murphy</td>
+          <td>pmurphy@bluedotmd.com</td>
+          <td>HVAC Service Supervisor</td>
+          <td>8554 - Blue Dot</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-12-05</td>
+          <td>2026-04-16</td>
+          <td>2026-02-18</td>
+          <td class="stale-cell">2026-02-18</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>LC2L34102B1</td>
+          <td>Eric Nottingham</td>
+          <td>enottingham@bluedotmd.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>8554 - Blue Dot</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-11-05</td>
+          <td>2026-04-10</td>
+          <td>2026-02-18</td>
+          <td class="stale-cell">2026-02-18</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG30413KS</td>
+          <td>Judy Weissberg</td>
+          <td>jweissberg@bluedotmd.com</td>
+          <td>Operations Manager</td>
+          <td>8554 - Blue Dot</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-06-30</td>
+          <td>2026-04-16</td>
+          <td>2026-02-18</td>
+          <td class="stale-cell">2026-02-18</td>
+        </tr>
+
+        <tr class="stale">
+          <td>DMXL5102H8B</td>
+          <td>Andrew Smith</td>
+          <td>ahsmith@ars.com</td>
+          <td>Dispatcher</td>
+          <td>8577 - ARS of Boston South</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-02-12</td>
+          <td>2026-04-16</td>
+          <td>2026-02-10</td>
+          <td class="stale-cell">2026-02-07</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL3192F6H</td>
+          <td>Bowen Brady</td>
+          <td>bbrady@ars.com</td>
+          <td>Sales Coordinator</td>
+          <td>8603 - ARS of Detroit</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-09</td>
+          <td>2026-05-09</td>
+          <td>2026-05-02</td>
+          <td>2026-05-02</td>
+        </tr>
+
+        <tr class="stale">
+          <td>DMXL5093QRZ</td>
+          <td>Howard Bond</td>
+          <td>hbond@ars.com</td>
+          <td>Sales Coordinator</td>
+          <td>8757 - Yes! AC &amp; Plumbing</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-18</td>
+          <td>2026-04-21</td>
+          <td>2026-02-15</td>
+          <td class="stale-cell">2026-02-15</td>
+        </tr>
+
+        <tr class="stale">
+          <td>DMXL3192F90</td>
+          <td>Omar Rodriguez</td>
+          <td>orodriguez@ajperri.com</td>
+          <td>Sales Manager</td>
+          <td>8802 - AJ Perri</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-02-28</td>
+          <td>2026-04-16</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3313H5R</td>
+          <td>Jake Masiero</td>
+          <td>jmasiero@ajperri.com</td>
+          <td>HVAC Service Manager</td>
+          <td>8802 - AJ Perri</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-19</td>
+          <td>2026-04-09</td>
+          <td>2026-02-17</td>
+          <td class="stale-cell">2026-02-17</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5090YWK</td>
+          <td>Bryan Quintard</td>
+          <td>bquintard@ars.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>8876 - ARS of Raleigh</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-29</td>
+          <td>2026-04-29</td>
+          <td>2026-04-30</td>
+          <td>2026-04-29</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ5070V6J</td>
+          <td>Arturo Acevedo</td>
+          <td>aacevedo@ars.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>8876 - ARS of Raleigh</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-23</td>
+          <td>2026-04-09</td>
+          <td>2026-03-23</td>
+          <td>2026-03-23</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ5070V4S</td>
+          <td>Aaron Franklin</td>
+          <td>afranklin@ars.com</td>
+          <td>Weekly Plumb Repair Spec</td>
+          <td>8876 - ARS of Raleigh</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-10-17</td>
+          <td>2026-04-16</td>
+          <td>2026-03-16</td>
+          <td>2026-03-16</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5070V6B</td>
+          <td>Alfredo Olivo</td>
+          <td>aolivo@ars.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>8877 - ARS of Durham</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-03</td>
+          <td>2026-05-03</td>
+          <td>2026-04-20</td>
+          <td>2026-04-20</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5070TZX1</td>
+          <td>Evan Lang</td>
+          <td>elang@ars.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>8880 - ARS of Wilmington</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-25</td>
+          <td>2026-04-21</td>
+          <td>2026-02-21</td>
+          <td>2026-02-19</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ5070V11</td>
+          <td>William Ireland</td>
+          <td>wireland@ars.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>8880 - ARS of Wilmington</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-25</td>
+          <td>2026-04-10</td>
+          <td>2026-02-24</td>
+          <td class="stale-cell">2026-02-17</td>
+        </tr>
+
+        <tr class="stale">
+          <td>L5CG3150MT2</td>
+          <td>Brian Hammett</td>
+          <td>bhammett@ars.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>8880 - ARS of Wilmington</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-23</td>
+          <td>2026-04-11</td>
+          <td>2026-02-24</td>
+          <td class="stale-cell">2026-02-17</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3040FFD</td>
+          <td>Jason Dorsey</td>
+          <td>jdorsey@ars.com</td>
+          <td>Weekly Commercial Acct Rp</td>
+          <td>8927 - RR of Cleveland</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+          <td>2026-04-23</td>
+          <td>2026-04-23</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZRG</td>
+          <td>John Conti</td>
+          <td>jconti@ars.com</td>
+          <td>Weekly Commercial Acct Rp</td>
+          <td>8927 - RR of Cleveland</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-15</td>
+          <td>2026-04-15</td>
+          <td>2026-04-15</td>
+          <td>2026-04-15</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL5093QS5</td>
+          <td>8927 Display</td>
+          <td>8927display@ars.com</td>
+          <td></td>
+          <td>8927 - RR of Cleveland</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-10</td>
+          <td>2026-05-10</td>
+          <td>2026-03-07</td>
+          <td>2026-03-07</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL51026S6</td>
+          <td>Mitzi Hobson</td>
+          <td>mhobson@cwaohio.com</td>
+          <td>Dispatcher</td>
+          <td>8928 - Columbus Worthington Air</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-25</td>
+          <td>2026-04-26</td>
+          <td>2026-02-25</td>
+          <td>2026-02-22</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ5280JT5</td>
+          <td>Heyward Dawson</td>
+          <td>hdawson@ars.com</td>
+          <td>HVAC AOR Sales Rep</td>
+          <td>9051 - ARS of Charleston</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-06</td>
+          <td>2026-04-09</td>
+          <td>2026-04-02</td>
+          <td>2026-03-31</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5280JQ4</td>
+          <td>Sherry Carmon</td>
+          <td>scarmon@ars.com</td>
+          <td>HR Manager</td>
+          <td>9051 - ARS of Charleston</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-23</td>
+          <td>2026-04-25</td>
+          <td>2026-02-19</td>
+          <td>2026-02-19</td>
+        </tr>
+
+        <tr class="stale">
+          <td>DMXL5093QTT</td>
+          <td>9051 Display</td>
+          <td>9051display@ars.com</td>
+          <td></td>
+          <td>9051 - ARS of Charleston</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-21</td>
+          <td>2026-04-22</td>
+          <td>2026-02-17</td>
+          <td class="stale-cell">2026-02-17</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZRK</td>
+          <td>Shawn Easley</td>
+          <td>seasley@ars.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>9052 - ARS of Columbia</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-08</td>
+          <td>2026-04-09</td>
+          <td>2026-03-09</td>
+          <td>2026-03-09</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL5093QZ1</td>
+          <td>Corey Copeland</td>
+          <td>cmcopeland@ars.com</td>
+          <td>Dispatcher</td>
+          <td>9052 - ARS of Columbia</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-22</td>
+          <td>2026-04-22</td>
+          <td>2026-02-18</td>
+          <td class="stale-cell">2026-02-15</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZSR</td>
+          <td>Marcus Wilder</td>
+          <td>mwilder@ars.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>9055 - ARS of Myrtle Beach</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG30220631</td>
+          <td>Anthony RodriguezRoman</td>
+          <td>antrodriguez@ars.com</td>
+          <td>HVAC AOR Sales Rep</td>
+          <td>9055 - ARS of Myrtle Beach</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5280JQP</td>
+          <td>Matthew Sarrio</td>
+          <td>msarrio@ars.com</td>
+          <td>HVAC AOR Sales Rep</td>
+          <td>9055 - ARS of Myrtle Beach</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+          <td>2026-05-07</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ44608VM</td>
+          <td>Bradley Stanley</td>
+          <td>bstanley@ars.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>9055 - ARS of Myrtle Beach</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-16</td>
+          <td>2026-04-09</td>
+          <td>2026-03-17</td>
+          <td>2026-03-17</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZDL</td>
+          <td>Jessica Contreras</td>
+          <td>jeslopez@brotherair.com</td>
+          <td>Scheduler</td>
+          <td>9062 - Brother&#x27;s</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-16</td>
+          <td>2026-04-09</td>
+          <td>2026-04-28</td>
+          <td>2026-04-28</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL5093QW1</td>
+          <td>Christine Bolton</td>
+          <td>christyb@brotherair.com</td>
+          <td>Controller</td>
+          <td>9062 - Brother&#x27;s</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-09</td>
+          <td>2026-05-10</td>
+          <td>2026-03-09</td>
+          <td>2026-03-09</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZRX</td>
+          <td>Thomas Baker</td>
+          <td>tbaker@brotherair.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>9062 - Brother&#x27;s</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-04</td>
+          <td>2026-05-04</td>
+          <td>2026-03-07</td>
+          <td>2026-03-07</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL3312MFW</td>
+          <td>Daniel Guido</td>
+          <td>dguido@brotherair.com</td>
+          <td>Warehouse Specialist</td>
+          <td>9062 - Brother&#x27;s</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-23</td>
+          <td>2026-05-07</td>
+          <td>2026-03-05</td>
+          <td>2026-03-05</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ509103H1</td>
+          <td>Robert McManus</td>
+          <td>rmcmanus@brotherair.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>9062 - Brother&#x27;s</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-10-29</td>
+          <td>2026-04-10</td>
+          <td>2026-03-20</td>
+          <td class="stale-cell">2025-09-27</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3151017</td>
+          <td>Rikki McDaniel</td>
+          <td>rmcdaniel@conwayservices.net</td>
+          <td>Scheduler</td>
+          <td>9106 - Conway Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-07</td>
+          <td>2026-05-08</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3040FDL</td>
+          <td>Jesse Moreno</td>
+          <td>jjmoreno@ars.com</td>
+          <td>Weekly Commercial Acct Rp</td>
+          <td>9126 - ARS of Dallas</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3040FF1</td>
+          <td>Peyton Hicks</td>
+          <td>phicks@ars.com</td>
+          <td>Dispatcher</td>
+          <td>9126 - ARS of Dallas</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-06</td>
+          <td>2026-04-09</td>
+          <td>2026-04-12</td>
+          <td>2026-04-12</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3232R9N</td>
+          <td>AntiJuan Starks</td>
+          <td>astarks@ars.com</td>
+          <td>Safety Manager</td>
+          <td>9128 - ARS DFW</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-17</td>
+          <td>2026-04-10</td>
+          <td>2026-03-17</td>
+          <td>2026-03-17</td>
+        </tr>
+
+        <tr class="stale">
+          <td>DMXL5093QXP</td>
+          <td>Austin Hibbs</td>
+          <td>ahibbs@ars.com</td>
+          <td>Plumbing Helper</td>
+          <td>9132 - ARS of Austin</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-02-18</td>
+          <td>2026-04-20</td>
+          <td>2026-02-18</td>
+          <td>2026-02-18</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5070V4V</td>
+          <td>Joe Gonzales</td>
+          <td>jogonzales@ars.com</td>
+          <td>HVAC Service Supervisor</td>
+          <td>9133 - ARS of San Antonio</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-06</td>
+          <td>2026-05-06</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG315101N</td>
+          <td>Brooklynn Hilton</td>
+          <td>bhilton@ars.com</td>
+          <td>Scheduler</td>
+          <td>9133 - ARS of San Antonio</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-24</td>
+          <td>2026-04-24</td>
+          <td>2026-04-15</td>
+          <td>2026-04-15</td>
+        </tr>
+
+        <tr class="stale">
+          <td>DMXL5093QXW</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9153 - Yes! Utah</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-11</td>
+          <td>2026-05-11</td>
+          <td>2025-12-12</td>
+          <td class="stale-cell">2025-12-12</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3040F91</td>
+          <td>Gregory Wilson</td>
+          <td>gwilson@ars.com</td>
+          <td>HVAC Sales Manager</td>
+          <td>9201 - ARS of Manassas</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-02</td>
+          <td>2026-04-09</td>
+          <td>2026-02-26</td>
+          <td>2026-02-26</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5090YWM</td>
+          <td>Joseph Dannenberg</td>
+          <td>jdannenberg@ars.com</td>
+          <td>Weekly Commercial Acct Rp</td>
+          <td>9226 - RR of Seattle</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-09</td>
+          <td>2026-05-10</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>LC2L34200XF</td>
+          <td>Conner Chambers</td>
+          <td>crchambers@blueflamecomfort.com</td>
+          <td>AOR Installation Tech</td>
+          <td>9228 - Blue Flame Heating &amp;Air</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-12-12</td>
+          <td>2026-04-10</td>
+          <td>2026-03-24</td>
+          <td>2026-03-24</td>
+        </tr>
+
+        <tr class="stale">
+          <td>L2MQ509101D</td>
+          <td>Connar Nichols</td>
+          <td>cnichols@blueflamecomfort.com</td>
+          <td>HVAC Sales Manager</td>
+          <td>9228 - Blue Flame Heating &amp;Air</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-01-19</td>
+          <td>2026-04-10</td>
+          <td>2026-03-20</td>
+          <td>2026-03-20</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3313H5G</td>
+          <td>Bradley Ruddell</td>
+          <td>bruddell@ars.com</td>
+          <td>AOR Installation Manager</td>
+          <td>9228 - Blue Flame Heating &amp;Air</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-02</td>
+          <td>2026-04-09</td>
+          <td>2026-02-26</td>
+          <td>2026-02-26</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL1462WVT</td>
+          <td>Crystal Young</td>
+          <td>cryoung@ars.com</td>
+          <td>Accounts Payable Spc</td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ50804XS</td>
+          <td>Rob Darling</td>
+          <td>rdarling@ars.com</td>
+          <td>Consultant</td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-30</td>
+          <td>2026-04-09</td>
+          <td>2026-04-27</td>
+          <td>2026-04-27</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ4460WJG</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-23</td>
+          <td>2026-04-09</td>
+          <td>2026-02-17</td>
+          <td class="stale-cell">2026-02-17</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3201VYS</td>
+          <td>Mary King</td>
+          <td>mking@ars.com</td>
+          <td>Business Analyst</td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-12-26</td>
+          <td>2026-04-10</td>
+          <td>2025-12-26</td>
+          <td class="stale-cell">2025-12-22</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMJ009UPW</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-09-29</td>
+          <td>2026-04-16</td>
+          <td>2025-09-28</td>
+          <td class="stale-cell">2025-09-28</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3232R9J</td>
+          <td>Christopher Huggins</td>
+          <td>chuggins@ars.com</td>
+          <td>IT Support Tech</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-11</td>
+          <td>2026-05-11</td>
+          <td>2026-05-11</td>
+          <td>2026-05-11</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3201VY7</td>
+          <td>Mario Rodriguez</td>
+          <td>mrodriguez@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-19</td>
+          <td>2026-04-11</td>
+          <td>2026-05-04</td>
+          <td>2026-05-04</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL3192F81</td>
+          <td>Jose Villalobos</td>
+          <td>jvillalobos@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-18</td>
+          <td>2026-04-18</td>
+          <td>2026-04-18</td>
+          <td>2026-04-18</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL3192F9D</td>
+          <td>Jose Villalobos</td>
+          <td>jvillalobos@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-18</td>
+          <td>2026-04-18</td>
+          <td>2026-04-18</td>
+          <td>2026-04-18</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5091047</td>
+          <td>Jessie Barsky</td>
+          <td>jbarsky@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-16</td>
+          <td>2026-04-09</td>
+          <td>2026-03-16</td>
+          <td>2026-03-16</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG2403YVH</td>
+          <td>Mario Rodriguez</td>
+          <td>mrodriguez@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-11</td>
+          <td>2026-04-10</td>
+          <td>2026-03-11</td>
+          <td>2026-03-11</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3201VY1</td>
+          <td>Mario Rodriguez</td>
+          <td>mrodriguez@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-28</td>
+          <td>2026-04-09</td>
+          <td>2026-02-28</td>
+          <td>2026-02-28</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG2410D06</td>
+          <td>Lauren Pfleiderer</td>
+          <td>lpfleiderer@ars.com</td>
+          <td>Recruiter</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-26</td>
+          <td>2026-04-10</td>
+          <td>2026-02-27</td>
+          <td>2026-02-26</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ5070V08</td>
+          <td>Ismael Justiniano</td>
+          <td>ijustiniano@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-24</td>
+          <td>2026-04-26</td>
+          <td>2026-02-24</td>
+          <td>2026-02-24</td>
+        </tr>
+
+        <tr class="stale">
+          <td>L5CG3040FG0</td>
+          <td>Mario Rodriguez</td>
+          <td>mrodriguez@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-19</td>
+          <td>2026-04-09</td>
+          <td>2026-02-17</td>
+          <td class="stale-cell">2026-02-17</td>
+        </tr>
+
+        <tr class="stale">
+          <td>L5CG2403YS7</td>
+          <td>Victoria Fackovec</td>
+          <td>vfackovec@ajperri.com</td>
+          <td>Division HR Manager</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-02-16</td>
+          <td>2026-04-09</td>
+          <td>2026-02-13</td>
+          <td class="stale-cell">2026-02-13</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG315106T</td>
+          <td>Whitney Hakey</td>
+          <td>whakey@ars.com</td>
+          <td>Recruiter</td>
+          <td>9700 - Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2026-01-06</td>
+          <td>2026-04-16</td>
+          <td>2026-01-06</td>
+          <td class="stale-cell">2026-01-06</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3293CLQ</td>
+          <td>Susan Gross</td>
+          <td>sugross@ars.com</td>
+          <td>Quality Assurance Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-09-22</td>
+          <td>2026-04-10</td>
+          <td>2025-09-22</td>
+          <td class="stale-cell">2025-09-22</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL30120DG</td>
+          <td></td>
+          <td>JVillalobos.2@ars.com</td>
+          <td></td>
+          <td>8120 - RighTime Riverside</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL30120BT</td>
+          <td></td>
+          <td>JVillalobos.2@ars.com</td>
+          <td></td>
+          <td>8120 - RighTime Riverside</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL30120BF</td>
+          <td>Esperanza Quezada</td>
+          <td>equezada@ars.com</td>
+          <td>Telemarketing Rep</td>
+          <td>8120 - RighTime Riverside</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL301209J</td>
+          <td>Melanie Jones</td>
+          <td>mejones@rightimeservices.com</td>
+          <td>Install Supervisor</td>
+          <td>8120 - RighTime Riverside</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-20</td>
+          <td>2026-04-20</td>
+          <td>2026-04-18</td>
+          <td>2026-04-18</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL3192F8J</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>8120 - RighTime Riverside</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-13</td>
+          <td>2026-04-16</td>
+          <td>2026-04-09</td>
+          <td>2026-04-09</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3313H63</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>8120 - RighTime Riverside</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-25</td>
+          <td>2026-04-09</td>
+          <td>2026-03-25</td>
+          <td>2026-03-25</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL5102H57</td>
+          <td>Sirrita Burt</td>
+          <td>sburt@ars.com</td>
+          <td>Dispatcher</td>
+          <td>8153 - ARS of Colorado</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-09</td>
+          <td>2026-05-09</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ5091046</td>
+          <td>LaVaris Corbitt</td>
+          <td>lcorbitt@floridahomeac.com</td>
+          <td>Scheduler</td>
+          <td>8277 - Florida Home AC</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-07</td>
+          <td>2026-05-11</td>
+          <td>2026-04-01</td>
+          <td>2026-04-01</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG315105N</td>
+          <td>Myrhdyll Sande</td>
+          <td>mysande@floridahomeac.com</td>
+          <td>AOR Helper</td>
+          <td>8277 - Florida Home AC</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-01</td>
+          <td>2026-04-11</td>
+          <td>2026-03-19</td>
+          <td>2026-03-19</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL3312MGT</td>
+          <td>Shandell Knight</td>
+          <td>sknight@ars.com</td>
+          <td>Dispatcher</td>
+          <td>8281 - ARS of Orlando</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-24</td>
+          <td>2026-04-24</td>
+          <td>2026-04-23</td>
+          <td>2026-04-23</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL3192F8W</td>
+          <td>8298 Display</td>
+          <td>8298display@ars.com</td>
+          <td>SE Call Center Display Computer</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-11</td>
+          <td>2026-05-02</td>
+          <td>2026-05-02</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL5102H8J</td>
+          <td>Aaliyah Benaine</td>
+          <td>abenaine@ars.com</td>
+          <td>Customer Service Rep</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL5102H3K</td>
+          <td>Jennifer CollierSadoski</td>
+          <td>jcolliersadoski@ars.com</td>
+          <td>Customer Service Rep</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL5102H9N</td>
+          <td>Brandy GarciaEspinosa</td>
+          <td>bgarciaespinosa@ars.com</td>
+          <td>Cust Service Spc</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL3386CXM</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL51026QT</td>
+          <td>Regine Robinson</td>
+          <td>rrobinson@ars.com</td>
+          <td>Customer Service Rep</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-31</td>
+          <td>2026-05-02</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL3386CWX</td>
+          <td>8298 Display</td>
+          <td>8298display@ars.com</td>
+          <td>SE Call Center Display Computer</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL3312MBP</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL3386CXL</td>
+          <td>Marichard Rodriguez</td>
+          <td>marirodriguez@ars.com</td>
+          <td>Customer Service Rep</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-25</td>
+          <td>2026-04-25</td>
+          <td>2026-04-23</td>
+          <td>2026-04-23</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL51026SD</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-23</td>
+          <td>2026-04-23</td>
+          <td>2026-04-23</td>
+          <td>2026-04-23</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL30120BR</td>
+          <td>Arianna Duval</td>
+          <td>aduval@ars.com</td>
+          <td>Customer Service Rep</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-23</td>
+          <td>2026-04-16</td>
+          <td>2026-04-07</td>
+          <td>2026-04-07</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL5102H61</td>
+          <td>Angela Caraballo</td>
+          <td>acaraballo@ars.com</td>
+          <td>Customer Service Rep</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-07</td>
+          <td>2026-04-09</td>
+          <td>2026-04-07</td>
+          <td>2026-04-07</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL3386CX7</td>
+          <td>Ibresha Macedon</td>
+          <td>imacedon@ars.com</td>
+          <td>Customer Service Rep</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-03</td>
+          <td>2026-04-16</td>
+          <td>2026-04-07</td>
+          <td>2026-04-07</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL3312MCK</td>
+          <td>Tomya Tate</td>
+          <td>ttate@ars.com</td>
+          <td>Customer Service Rep</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-10</td>
+          <td>2026-04-16</td>
+          <td>2026-04-06</td>
+          <td>2026-04-06</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL3386CXX</td>
+          <td>Jenita Wilson</td>
+          <td>jswilson@ars.com</td>
+          <td>Customer Service Rep</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-19</td>
+          <td>2026-04-16</td>
+          <td>2026-04-06</td>
+          <td>2026-04-06</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL3312MBF</td>
+          <td>Kadeana Shelton</td>
+          <td>kshelton@ars.com</td>
+          <td>Cust Service Spc</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-05</td>
+          <td>2026-04-11</td>
+          <td>2026-04-03</td>
+          <td>2026-04-03</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL3312MGV</td>
+          <td>Terrence Delay</td>
+          <td>tdelay@ars.com</td>
+          <td>Customer Service Rep</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-23</td>
+          <td>2026-04-16</td>
+          <td>2026-04-03</td>
+          <td>2026-04-03</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL5102H99</td>
+          <td>Mya Floence</td>
+          <td>mfloence@ars.com</td>
+          <td>Customer Service Rep</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-30</td>
+          <td>2026-04-16</td>
+          <td>2026-03-30</td>
+          <td>2026-03-30</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL30120C7</td>
+          <td>Jenaya Messer</td>
+          <td>jreilly@ars.com</td>
+          <td>Customer Service Rep</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-24</td>
+          <td>2026-04-16</td>
+          <td>2026-03-30</td>
+          <td>2026-03-30</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL5102H6Y</td>
+          <td>Maudeline Agenor</td>
+          <td>magenor@ars.com</td>
+          <td>Cust Service Spc</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-15</td>
+          <td>2026-04-16</td>
+          <td>2026-03-30</td>
+          <td>2026-03-30</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL3386CXY</td>
+          <td>Julio MorilloCabreja</td>
+          <td>jmorillocabreja@ars.com</td>
+          <td>Customer Service Supvr</td>
+          <td>8298 - Orlando Call Center</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-14</td>
+          <td>2026-04-16</td>
+          <td>2026-03-30</td>
+          <td>2026-03-30</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL5514QTK</td>
+          <td>Andre Einfeldt</td>
+          <td>aeinfeldt@ars.com</td>
+          <td>Customer Service Rep</td>
+          <td>8299 - Houston Call Center</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-21</td>
+          <td>2026-05-11</td>
+          <td>2026-04-23</td>
+          <td>2026-04-23</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZDM</td>
+          <td>Ashley Tippins</td>
+          <td>atippins@ars.com</td>
+          <td>HD Program Manager</td>
+          <td>8302 - Allgood Home Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-09</td>
+          <td>2026-05-09</td>
+          <td>2026-05-08</td>
+          <td>2026-05-01</td>
+        </tr>
+
+        <tr class="">
+          <td>L1H9603H1C3</td>
+          <td>Caelib Smith</td>
+          <td>cjsmith@ars.com</td>
+          <td>Dispatcher</td>
+          <td>8302 - Allgood Home Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+          <td>2026-04-10</td>
+          <td>2026-04-10</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL3192F5T</td>
+          <td>Victor Maria</td>
+          <td>vmaria@ars.com</td>
+          <td>Warehouse Specialist</td>
+          <td>8302 - Allgood Home Services</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-15</td>
+          <td>2026-04-10</td>
+          <td>2026-03-09</td>
+          <td>2026-03-09</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5280LG4</td>
+          <td>Shawn Cochran</td>
+          <td>scochran@ars.com</td>
+          <td>Plumbing Service Manager</td>
+          <td>8404 - ARS of Indianapolis</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-28</td>
+          <td>2026-05-11</td>
+          <td>2026-05-06</td>
+          <td>2026-05-06</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3040F7P</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>8450 - Comfort Heating and Air</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-30</td>
+          <td>2026-05-11</td>
+          <td>2026-03-27</td>
+          <td>2026-03-27</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL5372Y6H</td>
+          <td>Jznee Currie</td>
+          <td>jcurrie@ars.com</td>
+          <td>Sales Coordinator</td>
+          <td>8551 - ARS of Laurel</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-11</td>
+          <td>2026-05-11</td>
+          <td>2026-05-04</td>
+          <td>2026-05-04</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZS5</td>
+          <td>Mikayla Sapp</td>
+          <td>msapp@ars.com</td>
+          <td>Sales Coordinator</td>
+          <td>8554 - Blue Dot</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ509102P</td>
+          <td>Tamika Loney</td>
+          <td>tloney@bluedotmd.com</td>
+          <td>Quality Assurance Manager</td>
+          <td>8554 - Blue Dot</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+          <td>2026-05-04</td>
+          <td>2026-04-28</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ60619VS</td>
+          <td>Talitha Berry</td>
+          <td>tmberry@ars.com</td>
+          <td>HD Program Manager</td>
+          <td>8603 - ARS of Detroit</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-09</td>
+          <td>2026-05-09</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZJY</td>
+          <td>John Reinhard</td>
+          <td>jreinhard@ars.com</td>
+          <td>AOR Installation Tech</td>
+          <td>8603 - ARS of Detroit</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-24</td>
+          <td>2026-04-24</td>
+          <td>2026-05-08</td>
+          <td>2026-05-07</td>
+        </tr>
+
+        <tr class="inactive-user">
+          <td>DMXL5102H42</td>
+          <td>Kristina MacDonald</td>
+          <td>kmacdonald@ajperri.com</td>
+          <td>Customer Service Rep</td>
+          <td>8802 - AJ Perri</td>
+          <td class="bool no">No</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>DMXL5102H7X</td>
+          <td>Nishani Kohilawaththa</td>
+          <td>nkohilawaththa@ajperri.com</td>
+          <td>Customer Service Rep</td>
+          <td>8802 - AJ Perri</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG315105R</td>
+          <td>Marco Torres</td>
+          <td>mtorres@ars.com</td>
+          <td>Asst Sales Manager</td>
+          <td>8876 - ARS of Raleigh</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+          <td>2026-05-07</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ6130Z2W</td>
+          <td>Ryan Herz</td>
+          <td>rherz@ars.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>8877 - ARS of Durham</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-11</td>
+          <td>2026-05-11</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ5070V60</td>
+          <td>Bryan Gray</td>
+          <td>btgray@ars.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>8880 - ARS of Wilmington</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-20</td>
+          <td>2026-05-01</td>
+          <td>2026-04-19</td>
+          <td>2026-04-19</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL5093QSM</td>
+          <td>8927 Display</td>
+          <td>8927display@ars.com</td>
+          <td></td>
+          <td>8927 - RR of Cleveland</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-31</td>
+          <td>2026-05-11</td>
+          <td>2026-03-31</td>
+          <td>2026-03-28</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ43107CG</td>
+          <td>Robert Reardon</td>
+          <td>rreardon@ars.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>9055 - ARS of Myrtle Beach</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ509104Q</td>
+          <td>Todd Sherred</td>
+          <td>tsherred@ars.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>9055 - ARS of Myrtle Beach</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3025QL1</td>
+          <td>Rui Carreira</td>
+          <td>mcarreira@ars.com</td>
+          <td>HVAC Sales Manager</td>
+          <td>9055 - ARS of Myrtle Beach</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+          <td>2026-04-12</td>
+          <td>2026-04-12</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZF9</td>
+          <td>Bobby Nasekos</td>
+          <td>bnasekos@ars.com</td>
+          <td>AOR Installation Supvr</td>
+          <td>9062 - Brother&#x27;s</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-01</td>
+          <td>2026-05-01</td>
+          <td>2026-05-11</td>
+          <td>2026-05-11</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL301209Z</td>
+          <td>Courtney Bradley</td>
+          <td>cshepherd@brotherair.com</td>
+          <td>Warehouse Specialist</td>
+          <td>9062 - Brother&#x27;s</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ509103H1</td>
+          <td>Robert McManus</td>
+          <td>rmcmanus@brotherair.com</td>
+          <td>Weekly Comfort Advisor</td>
+          <td>9062 - Brother&#x27;s</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td class="stale-cell">2025-10-29</td>
+          <td>2026-04-10</td>
+          <td>2026-03-20</td>
+          <td class="stale-cell">2025-09-27</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3040FCF</td>
+          <td>John Stewart</td>
+          <td>jstewart@ars.com</td>
+          <td>Warehouse Inventory Mgr</td>
+          <td>9103 - ARS of Nashville</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-23</td>
+          <td>2026-04-23</td>
+          <td>2026-04-23</td>
+          <td>2026-04-23</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ509102N</td>
+          <td>Lawrence Hart</td>
+          <td>lhart@ars.com</td>
+          <td>Scheduler</td>
+          <td>9106 - Conway Services</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-08</td>
+          <td>2026-05-11</td>
+          <td>2026-05-11</td>
+          <td>2026-05-11</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ5280JQ6</td>
+          <td>Tashanna Minton</td>
+          <td>tminton@conwayservices.net</td>
+          <td>Controller</td>
+          <td>9106 - Conway Services</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-10</td>
+          <td>2026-04-22</td>
+          <td>2026-04-10</td>
+          <td>2026-04-10</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3040FF0</td>
+          <td>Brad Broyles</td>
+          <td>bbroyles@ars.com</td>
+          <td>Dispatcher</td>
+          <td>9126 - ARS of Dallas</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-06</td>
+          <td>2026-05-06</td>
+          <td>2026-05-06</td>
+          <td>2026-05-06</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5070XZX</td>
+          <td>Nicole Linnes</td>
+          <td>nlinnes@ars.com</td>
+          <td>Scheduler</td>
+          <td>9128 - ARS DFW</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-11</td>
+          <td>2026-04-29</td>
+          <td>2026-04-29</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG227407H</td>
+          <td>Murtaza Samma</td>
+          <td>t-msamma@ars.com</td>
+          <td></td>
+          <td>9131 - ARS of Houston</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-13</td>
+          <td>2026-04-13</td>
+          <td>2026-04-13</td>
+          <td>2026-04-13</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL5514QSR</td>
+          <td></td>
+          <td>CTeel@ars.com</td>
+          <td></td>
+          <td>9131 - ARS of Houston</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-13</td>
+          <td>2026-04-13</td>
+          <td>2026-04-12</td>
+          <td>2026-04-12</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ510135J</td>
+          <td>Rhonda Woodward</td>
+          <td>rwoodward@ars.com</td>
+          <td>Dispatch Manager</td>
+          <td>9133 - ARS of San Antonio</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-08</td>
+          <td>2026-05-11</td>
+          <td>2026-05-04</td>
+          <td>2026-05-04</td>
+        </tr>
+
+        <tr class="stale">
+          <td>LC2L34200XC</td>
+          <td>Matthew Oyler</td>
+          <td>moyler@theyesmancan.com</td>
+          <td>SM - Comfort Advisor</td>
+          <td>9153 - Yes! Utah</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-20</td>
+          <td>2026-04-20</td>
+          <td>2025-10-23</td>
+          <td class="stale-cell">2025-10-20</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ60616S7</td>
+          <td>Kevin Torres</td>
+          <td>ktorres@ars.com</td>
+          <td>Sales Coordinator</td>
+          <td>9201 - ARS of Manassas</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG30413KG</td>
+          <td>David Sullivan</td>
+          <td>dsullivan@ars.com</td>
+          <td>AOR Installation Manager</td>
+          <td>9201 - ARS of Manassas</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-20</td>
+          <td>2026-04-20</td>
+          <td>2026-04-20</td>
+          <td>2026-04-20</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3150ZDH</td>
+          <td>Regina Bumbray</td>
+          <td>rbumbray@ars.com</td>
+          <td>Service Coordinator</td>
+          <td>9201 - ARS of Manassas</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+          <td>2026-04-22</td>
+          <td>2026-04-17</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG3150ZKR</td>
+          <td>Miguel BurgosOrtiz</td>
+          <td>mburgosortiz@ars.com</td>
+          <td>Inside Sales Rep</td>
+          <td>9201 - ARS of Manassas</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-16</td>
+          <td>2026-05-11</td>
+          <td>2026-04-13</td>
+          <td>2026-04-13</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ60619WP</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9202 - McCarthy Services</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-03</td>
+          <td>2026-04-09</td>
+          <td>2026-04-02</td>
+          <td>2026-04-02</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ43501NL</td>
+          <td>Brian Barela</td>
+          <td>bbarela@ars.com</td>
+          <td>Region Sales Manager</td>
+          <td>9664 - East Division</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-10</td>
+          <td>2026-05-10</td>
+          <td>2026-05-08</td>
+          <td>2026-05-02</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL5093QYC</td>
+          <td>9700Display User</td>
+          <td>9700displayuser@corporate.com</td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-06</td>
+          <td>2026-05-06</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ4460WHZ</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-11</td>
+          <td>2026-05-11</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ61307JP</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ6070SMW</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-29</td>
+          <td>2026-05-11</td>
+          <td>2026-04-29</td>
+          <td>2026-04-29</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L1H95241STD</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+          <td>2026-04-29</td>
+          <td>2026-04-29</td>
+        </tr>
+
+        <tr class="">
+          <td>L1H95241825</td>
+          <td></td>
+          <td>KSTOKES@ars.com</td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-28</td>
+          <td>2026-04-28</td>
+          <td>2026-04-28</td>
+          <td>2026-04-28</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ6130752</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-21</td>
+          <td>2026-04-21</td>
+          <td>2026-04-20</td>
+          <td>2026-04-20</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ6070RW8</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ6070SF0</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ6070SMR</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L1H95250T1C</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L1H95250T5S</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+        </tr>
+
+        <tr class="">
+          <td>L1H95250RVK</td>
+          <td></td>
+          <td>HStevens@ars.com</td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-17</td>
+          <td>2026-04-17</td>
+          <td>2026-04-14</td>
+          <td>2026-04-14</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L1H95250SPJ</td>
+          <td>Shivani Tejuja Charlesbank</td>
+          <td>cb-stejuja@ars.com</td>
+          <td>Senior Associate</td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-12</td>
+          <td>2026-04-13</td>
+          <td>2026-04-11</td>
+          <td>2026-04-11</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L5CG408137F</td>
+          <td>Phanindra Gangina</td>
+          <td>pgangina@ars.com</td>
+          <td>Developer</td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-24</td>
+          <td>2026-04-09</td>
+          <td>2026-03-24</td>
+          <td>2026-03-24</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ5150Z8K</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-17</td>
+          <td>2026-04-09</td>
+          <td>2026-03-13</td>
+          <td>2026-03-13</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ4460WJG</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-23</td>
+          <td>2026-04-09</td>
+          <td>2026-02-17</td>
+          <td class="stale-cell">2026-02-17</td>
+        </tr>
+
+        <tr class="stale">
+          <td>L2MQ5101342</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+          <td>2026-01-06</td>
+          <td class="stale-cell">2026-01-06</td>
+        </tr>
+
+        <tr class="stale">
+          <td>DMXL5093R02</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>9700 - ARS Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-11</td>
+          <td>2026-05-11</td>
+          <td>2025-12-12</td>
+          <td class="stale-cell">2025-12-12</td>
+        </tr>
+
+        <tr class="">
+          <td>DMXL5093QY2</td>
+          <td>Russell Thornton</td>
+          <td>rthornton@ars.com</td>
+          <td>Acq Integration Admin</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-08</td>
+          <td>2026-05-11</td>
+          <td>2026-05-09</td>
+          <td>2026-05-06</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ6130Z3R</td>
+          <td>Jessie Barsky</td>
+          <td>jbarsky@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ6130Z2P</td>
+          <td>Jessie Barsky</td>
+          <td>jbarsky@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ61307LJ</td>
+          <td>Jessie Barsky</td>
+          <td>jbarsky@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ6130Z25</td>
+          <td>Jessie Barsky</td>
+          <td>jbarsky@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+          <td>2026-05-05</td>
+        </tr>
+
+        <tr class="">
+          <td>L1H95250SW9</td>
+          <td>Janice Harris</td>
+          <td>jaharris@ars.com</td>
+          <td>Business Relationship Mgr</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-23</td>
+          <td>2026-04-24</td>
+          <td>2026-05-04</td>
+          <td>2026-05-04</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3314D8B</td>
+          <td>Michael Koziara</td>
+          <td>mkoziara@ars.com</td>
+          <td>Dir Strategic Initiatives</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-08</td>
+          <td>2026-05-08</td>
+          <td>2026-05-04</td>
+          <td>2026-05-04</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5070V1D</td>
+          <td>Sylvia Respess</td>
+          <td>srespess@ars.com</td>
+          <td>Cash Management Supvr</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-05-11</td>
+          <td>2026-05-11</td>
+          <td>2026-04-30</td>
+          <td>2026-04-30</td>
+        </tr>
+
+        <tr class="">
+          <td>L1H95250T4Q</td>
+          <td>Taylor Hamilton</td>
+          <td>thamilton@ars.com</td>
+          <td>Recruiter</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-27</td>
+          <td>2026-04-09</td>
+          <td>2026-04-19</td>
+          <td>2026-04-19</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3201VYK</td>
+          <td>Jessie Barsky</td>
+          <td>jbarsky@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-04-15</td>
+          <td>2026-04-15</td>
+          <td>2026-04-13</td>
+          <td>2026-04-13</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ5401LGN</td>
+          <td>Faisal Khan</td>
+          <td>fkhan@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-23</td>
+          <td>2026-04-09</td>
+          <td>2026-03-23</td>
+          <td>2026-03-23</td>
+        </tr>
+
+        <tr class="">
+          <td>L2MQ5280JPW</td>
+          <td>Stuart Slyter</td>
+          <td>sslyter@ars.com</td>
+          <td>Recruiter</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-24</td>
+          <td>2026-04-09</td>
+          <td>2026-03-17</td>
+          <td>2026-03-17</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3040F8Q</td>
+          <td>Teresa Minnis</td>
+          <td>tminnis@ars.com</td>
+          <td>Accounts Payable Supvr</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-19</td>
+          <td>2026-05-11</td>
+          <td>2026-03-17</td>
+          <td>2026-03-17</td>
+        </tr>
+
+        <tr class="">
+          <td>L5CG3232R9Y</td>
+          <td>Murtaza Samma</td>
+          <td>msamma@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool yes">Yes</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-03-09</td>
+          <td>2026-04-09</td>
+          <td>2026-03-03</td>
+          <td>2026-03-03</td>
+        </tr>
+
+        <tr class="unknown-user">
+          <td>L2MQ5070V08</td>
+          <td>Ismael Justiniano</td>
+          <td>ijustiniano@ars.com</td>
+          <td>Field IT Analyst</td>
+          <td>9700 - Corporate</td>
+          <td class="bool na">N/A</td>
+          <td class="bool yes">Yes</td>
+          <td>2026-02-24</td>
+          <td>2026-04-26</td>
+          <td>2026-02-24</td>
+          <td>2026-02-24</td>
+        </tr>
+  </tbody>
+</table>
+</div>
+
+<script>
+const tbody = document.getElementById("tbody");
+const allRows = Array.from(tbody.querySelectorAll("tr"));
+const searchBox = document.getElementById("search");
+const filterUser = document.getElementById("filter-user");
+const filterDevice = document.getElementById("filter-device");
+const filterStale = document.getElementById("filter-stale");
+const rowCount = document.getElementById("row-count");
+
+function applyFilters() {
+  const q = searchBox.value.toLowerCase();
+  const ua = filterUser.value;
+  const da = filterDevice.value;
+  const staleOnly = filterStale.checked;
+  let visible = 0;
+
+  allRows.forEach(row => {
+    const cells = row.querySelectorAll("td");
+    const text = row.textContent.toLowerCase();
+    const userActiveCell = cells[5]?.textContent.trim();
+    const deviceActiveCell = cells[6]?.textContent.trim();
+    const rowCls = row.className;
+
+    const matchQ = !q || text.includes(q);
+    const matchUA = !ua || userActiveCell === ua;
+    const matchDA = !da || deviceActiveCell === da;
+    const matchStale = !staleOnly || rowCls === "stale";
+
+    const show = matchQ && matchUA && matchDA && matchStale;
+    row.style.display = show ? "" : "none";
+    if (show) visible++;
+  });
+
+  rowCount.textContent = `Showing ${visible} of ${allRows.length} devices`;
+}
+
+searchBox.addEventListener("input", applyFilters);
+filterUser.addEventListener("change", applyFilters);
+filterDevice.addEventListener("change", applyFilters);
+filterStale.addEventListener("change", applyFilters);
+applyFilters();
+
+// Sorting
+let sortCol = -1, sortDir = 1;
+document.querySelectorAll("th[data-col]").forEach(th => {
+  th.addEventListener("click", () => {
+    const col = parseInt(th.dataset.col);
+    if (sortCol === col) sortDir *= -1;
+    else { sortCol = col; sortDir = 1; }
+    document.querySelectorAll("th").forEach(h => h.classList.remove("asc","desc"));
+    th.classList.add(sortDir === 1 ? "asc" : "desc");
+
+    const sorted = allRows.slice().sort((a, b) => {
+      const av = a.querySelectorAll("td")[col]?.textContent.trim() || "";
+      const bv = b.querySelectorAll("td")[col]?.textContent.trim() || "";
+      return av.localeCompare(bv, undefined, {numeric: true}) * sortDir;
+    });
+    sorted.forEach(r => tbody.appendChild(r));
+    applyFilters();
+  });
+});
+</script>
+</body>
+</html>
