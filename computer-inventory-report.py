@@ -22,6 +22,8 @@ except ImportError:
 # ── Column indices (0-based) for the 'in' sheet ─────────────────────────────
 COL = {
     "asset_name":   1,   # B
+    "ci_type":      2,   # C  CI Type (Desktop / Laptop)
+    "product":      3,   # D  Product (model)
     "location":     4,   # E  Used By Location
     "email":        6,   # G  Used By Primary Email
     "name":         7,   # H  Used By Name
@@ -221,6 +223,8 @@ def build_html(rows, source_file):
         table_rows.append(
             f'<tr class="{cls}">'
             f'<td>{s("asset_name")}</td>'
+            f'<td>{s("ci_type")}</td>'
+            f'<td>{s("product")}</td>'
             f'<td class="tech">{html.escape(tech)}</td>'
             f'<td>{s("location")}</td>'
             f'<td>{s("name")}</td>'
@@ -320,6 +324,13 @@ def build_html(rows, source_file):
 
 <div class="toolbar">
   <input type="text" id="search" placeholder="Search asset, user, email…">
+  <label>Type:
+    <select id="filter-type">
+      <option value="">All Types</option>
+      <option value="Desktop">Desktop</option>
+      <option value="Laptop">Laptop</option>
+    </select>
+  </label>
   <label>Tech:
     <select id="filter-tech">
       <option value="">All Techs</option>
@@ -363,17 +374,19 @@ def build_html(rows, source_file):
 <table id="tbl">
   <thead><tr>
     <th data-col="0">Asset Name<span class="si"></span></th>
-    <th data-col="1">Tech<span class="si"></span></th>
-    <th data-col="2">Location<span class="si"></span></th>
-    <th data-col="3">Used By Name<span class="si"></span></th>
-    <th data-col="4">Email<span class="si"></span></th>
-    <th data-col="5">Job Title<span class="si"></span></th>
-    <th data-col="6">User Active<span class="si"></span></th>
-    <th data-col="7">Device Active in AD<span class="si"></span></th>
-    <th data-col="8">Last Audit Date<span class="si"></span></th>
-    <th data-col="9">Last Updated Date<span class="si"></span></th>
-    <th data-col="10">AD whenChanged<span class="si"></span></th>
-    <th data-col="11">AD LastLogonDate<span class="si"></span></th>
+    <th data-col="1">Type<span class="si"></span></th>
+    <th data-col="2">Model<span class="si"></span></th>
+    <th data-col="3">Tech<span class="si"></span></th>
+    <th data-col="4">Location<span class="si"></span></th>
+    <th data-col="5">Used By Name<span class="si"></span></th>
+    <th data-col="6">Email<span class="si"></span></th>
+    <th data-col="7">Job Title<span class="si"></span></th>
+    <th data-col="8">User Active<span class="si"></span></th>
+    <th data-col="9">Device Active in AD<span class="si"></span></th>
+    <th data-col="10">Last Audit Date<span class="si"></span></th>
+    <th data-col="11">Last Updated Date<span class="si"></span></th>
+    <th data-col="12">AD whenChanged<span class="si"></span></th>
+    <th data-col="13">AD LastLogonDate<span class="si"></span></th>
   </tr></thead>
   <tbody id="tbody">
 {rows_html}
@@ -385,6 +398,7 @@ def build_html(rows, source_file):
 const tbody     = document.getElementById("tbody");
 const allRows   = Array.from(tbody.querySelectorAll("tr"));
 const search    = document.getElementById("search");
+const fType     = document.getElementById("filter-type");
 const fTech     = document.getElementById("filter-tech");
 const fLoc      = document.getElementById("filter-loc");
 const fUser     = document.getElementById("filter-user");
@@ -392,8 +406,10 @@ const fDevice   = document.getElementById("filter-device");
 const fStale    = document.getElementById("filter-stale");
 const rowCount  = document.getElementById("row-count");
 
+// col indices: 0=Asset 1=Type 2=Model 3=Tech 4=Location 5=Name 6=Email 7=JobTitle 8=UserActive 9=DeviceActive
 function applyFilters() {{
   const q      = search.value.toLowerCase();
+  const type   = fType.value;
   const tech   = fTech.value;
   const loc    = fLoc.value;
   const ua     = fUser.value;
@@ -404,13 +420,14 @@ function applyFilters() {{
   allRows.forEach(row => {{
     const cells = row.querySelectorAll("td");
     const matchQ      = !q      || row.textContent.toLowerCase().includes(q);
-    const matchTech   = !tech   || cells[1]?.textContent.trim() === tech;
-    const matchLoc    = !loc    || cells[2]?.textContent.trim() === loc;
-    const matchUA     = !ua     || cells[6]?.textContent.trim() === ua;
-    const matchDA     = !da     || cells[7]?.textContent.trim() === da;
+    const matchType   = !type   || cells[1]?.textContent.trim() === type;
+    const matchTech   = !tech   || cells[3]?.textContent.trim() === tech;
+    const matchLoc    = !loc    || cells[4]?.textContent.trim() === loc;
+    const matchUA     = !ua     || cells[8]?.textContent.trim() === ua;
+    const matchDA     = !da     || cells[9]?.textContent.trim() === da;
     const matchStale  = !stOnly || row.className === "stale";
 
-    const show = matchQ && matchTech && matchLoc && matchUA && matchDA && matchStale;
+    const show = matchQ && matchType && matchTech && matchLoc && matchUA && matchDA && matchStale;
     row.style.display = show ? "" : "none";
     if (show) vis++;
   }});
@@ -418,7 +435,7 @@ function applyFilters() {{
   rowCount.textContent = `Showing ${{vis}} of ${{allRows.length}} devices`;
 }}
 
-[search, fTech, fLoc, fUser, fDevice, fStale].forEach(el =>
+[search, fType, fTech, fLoc, fUser, fDevice, fStale].forEach(el =>
   el.addEventListener(el.type === "checkbox" ? "change" : "input", applyFilters)
 );
 applyFilters();
