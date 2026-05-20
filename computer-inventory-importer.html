@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Computer Inventory</title>
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         font-size: 13px; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
+
+  /* ── Header ─────────────────────────────────────────────────────────── */
+  header { background: #1a1a2e; color: #fff; padding: 16px 24px;
+           display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  #header-meta { font-size: 11px; opacity: 0.6; }
+  #import-btn { background: #fff; color: #1a1a2e; border: none; border-radius: 6px;
+                padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  #import-btn:hover { background: #e8e8f0; }
+
+  /* ── Import screen ───────────────────────────────────────────────────── */
+  #import-screen { display: flex; align-items: center; justify-content: center;
+                   min-height: calc(100vh - 56px); padding: 32px; }
+  .drop-zone { background: #fff; border: 2px dashed #c0c4d0; border-radius: 16px;
+               padding: 64px 48px; text-align: center; max-width: 480px; width: 100%;
+               transition: border-color .2s, background .2s; }
+  .drop-zone.over { border-color: #1a1a2e; background: #f5f6ff; }
+  .drop-icon { font-size: 48px; margin-bottom: 16px; }
+  .drop-zone h2 { font-size: 18px; margin-bottom: 8px; }
+  .drop-zone p { color: #666; font-size: 13px; margin-bottom: 24px; }
+  .browse-btn { display: inline-block; background: #1a1a2e; color: #fff;
+                border: none; border-radius: 8px; padding: 10px 24px;
+                font-size: 13px; font-weight: 600; cursor: pointer; }
+  .browse-btn:hover { background: #2d2d4e; }
+  #file-input { display: none; }
+  #error-msg { color: #c62828; margin-top: 16px; font-size: 13px; min-height: 20px; }
+
+  /* ── Report screen ───────────────────────────────────────────────────── */
+  #report-screen { display: none; }
+
+  .summary { display: flex; gap: 12px; padding: 16px 24px; flex-wrap: wrap; }
+  .card { background: #fff; border-radius: 8px; padding: 12px 18px;
+          min-width: 130px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .card .num { font-size: 26px; font-weight: 700; }
+  .card .lbl { font-size: 11px; color: #666; margin-top: 2px; }
+  .card.red    .num { color: #d32f2f; }
+  .card.orange .num { color: #e65100; }
+  .card.yellow .num { color: #f9a825; }
+  .card.gray   .num { color: #555; }
+
+  .toolbar { padding: 0 24px 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .toolbar input[type=text] { padding: 7px 12px; border: 1px solid #ccc; border-radius: 6px;
+                               font-size: 13px; width: 240px; }
+  .toolbar select { padding: 7px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; }
+  .toolbar label  { font-size: 12px; color: #555; display: flex; align-items: center; gap: 4px; }
+
+  .legend { display: flex; gap: 12px; padding: 0 24px 16px; flex-wrap: wrap; font-size: 11px; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .sw { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; display: inline-block; }
+  #row-count { font-size: 12px; color: #555; padding: 0 24px 8px; }
+
+  .wrap { padding: 0 24px 32px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; background: #fff;
+          border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  th { background: #1a1a2e; color: #fff; padding: 10px; text-align: left;
+       font-weight: 600; font-size: 12px; white-space: nowrap;
+       cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 2; }
+  th:hover { background: #2d2d4e; }
+  th .si { margin-left: 4px; opacity: 0.5; font-size: 10px; }
+  th.asc  .si::after { content: "▲"; }
+  th.desc .si::after { content: "▼"; }
+  th:not(.asc):not(.desc) .si::after { content: "⇅"; }
+
+  td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(0,0,0,.025); }
+
+  tr.inactive-user    td { background: #fdecea; }
+  tr.inactive-user:hover td { background: #fcd8d5; }
+  tr.unknown-user     td { background: #fff8e1; }
+  tr.unknown-user:hover td { background: #fff0c0; }
+  tr.inactive-device  td { background: #fff3e0; }
+  tr.stale            td { background: #f3f8ff; }
+
+  td.bool { text-align: center; font-weight: 600; font-size: 12px; }
+  td.bool.yes { color: #2e7d32; }
+  td.bool.no  { color: #c62828; }
+  td.bool.na  { color: #888; }
+  td.stale-cell { color: #e65100; font-weight: 600; }
+  td.tech { font-weight: 600; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Computer Inventory</h1>
+  <span id="header-meta"></span>
+  <button id="import-btn" onclick="showImport()" style="display:none">Import New File</button>
+</header>
+
+<!-- ── Import screen ─────────────────────────────────────────────────── -->
+<div id="import-screen">
+  <div class="drop-zone" id="drop-zone">
+    <div class="drop-icon">📂</div>
+    <h2>Import Inventory File</h2>
+    <p>Drop your Freshservice Excel export here,<br>or click to browse. Reads the <strong>in</strong> sheet.</p>
+    <button class="browse-btn" onclick="document.getElementById('file-input').click()">Choose File</button>
+    <input type="file" id="file-input" accept=".xlsx,.xls">
+    <div id="error-msg"></div>
+  </div>
+</div>
+
+<!-- ── Report screen ─────────────────────────────────────────────────── -->
+<div id="report-screen">
+  <div class="summary" id="summary"></div>
+
+  <div class="toolbar">
+    <input type="text" id="search" placeholder="Search asset, user, email…">
+    <label>Type:
+      <select id="filter-type">
+        <option value="">All Types</option>
+        <option value="Desktop">Desktop</option>
+        <option value="Laptop">Laptop</option>
+      </select>
+    </label>
+    <label>Tech:
+      <select id="filter-tech"><option value="">All Techs</option></select>
+    </label>
+    <label>Location:
+      <select id="filter-loc"><option value="">All Locations</option></select>
+    </label>
+    <label>User Active:
+      <select id="filter-user">
+        <option value="">All</option>
+        <option value="Yes">Yes</option>
+        <option value="No">No</option>
+        <option value="N/A">N/A</option>
+      </select>
+    </label>
+    <label>Device Active in AD:
+      <select id="filter-device">
+        <option value="">All</option>
+        <option value="Yes">Yes</option>
+        <option value="No">No</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="filter-stale"> Stale only (&gt;90d)</label>
+  </div>
+  <div id="row-count"></div>
+
+  <div class="legend">
+    <span><span class="sw" style="background:#fdecea"></span> Inactive User</span>
+    <span><span class="sw" style="background:#fff8e1"></span> User Unknown/N/A</span>
+    <span><span class="sw" style="background:#fff3e0"></span> Inactive Device in AD</span>
+    <span><span class="sw" style="background:#f3f8ff"></span> Stale (&gt;90d)</span>
+    <span style="color:#e65100;font-weight:600">Orange date = stale</span>
+  </div>
+
+  <div class="wrap">
+    <table id="tbl">
+      <thead><tr id="thead-row"></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// ── Constants ────────────────────────────────────────────────────────────────
+const STALE_DAYS = 90;
+
+const TECH_MAP = {
+  "8551":"Jessie Barsky","8554":"Jessie Barsky","8577":"Jessie Barsky",
+  "8802":"Jessie Barsky","8804":"Jessie Barsky","8876":"Jessie Barsky",
+  "8877":"Jessie Barsky","8880":"Jessie Barsky","9051":"Jessie Barsky",
+  "9052":"Jessie Barsky","9055":"Jessie Barsky",
+
+  "9201":"Faisal Khan","9202":"Faisal Khan","9203":"Faisal Khan",
+  "9207":"Faisal Khan","8378":"Faisal Khan","8425":"Faisal Khan",
+  "8603":"Faisal Khan","8726":"Faisal Khan","8927":"Faisal Khan",
+  "8404":"Faisal Khan","8450":"Faisal Khan","8926":"Faisal Khan",
+  "8928":"Faisal Khan","8929":"Faisal Khan","9001":"Faisal Khan",
+
+  "8253":"Tony Justiniano","8259":"Tony Justiniano","8277":"Tony Justiniano",
+  "8278":"Tony Justiniano","8281":"Tony Justiniano","8282":"Tony Justiniano",
+  "9062":"Tony Justiniano","8298":"Tony Justiniano",
+
+  "8302":"Murtaza Samma","9103":"Murtaza Samma","9126":"Murtaza Samma",
+  "9127":"Murtaza Samma","9128":"Murtaza Samma","9131":"Murtaza Samma",
+  "9132":"Murtaza Samma","9133":"Murtaza Samma","9134":"Murtaza Samma",
+  "9138":"Murtaza Samma","8299":"Murtaza Samma",
+
+  "8107":"Joe Villalobos","8119":"Joe Villalobos","8120":"Joe Villalobos",
+  "8130":"Joe Villalobos","8131":"Joe Villalobos","8153":"Joe Villalobos",
+  "8757":"Joe Villalobos","8976":"Joe Villalobos","9153":"Joe Villalobos",
+  "9226":"Joe Villalobos","9228":"Joe Villalobos",
+
+  "9106":"Mario Rodriguez","9700":"Mario Rodriguez",
+};
+
+// Headers we care about (first match wins for duplicates like "Used By Is Active")
+const WANT_HEADERS = [
+  "Asset Name", "CI Type", "Product", "Used By Location",
+  "Used By Primary Email", "Used By Name", "Used By Job Title",
+  "Used By Is Active", "Device Active in AD",
+  "Last Audit Date", "Last Updated Date", "AD whenChanged", "AD LastLogonDate"
+];
+
+// ── UI state ─────────────────────────────────────────────────────────────────
+function showImport() {
+  document.getElementById("import-screen").style.display = "flex";
+  document.getElementById("report-screen").style.display = "none";
+  document.getElementById("import-btn").style.display = "none";
+  document.getElementById("header-meta").textContent = "";
+  document.getElementById("error-msg").textContent = "";
+}
+
+function showReport() {
+  document.getElementById("import-screen").style.display = "none";
+  document.getElementById("report-screen").style.display = "block";
+  document.getElementById("import-btn").style.display = "";
+}
+
+function setError(msg) {
+  document.getElementById("error-msg").textContent = msg;
+}
+
+// ── File handling ─────────────────────────────────────────────────────────────
+const dropZone = document.getElementById("drop-zone");
+const fileInput = document.getElementById("file-input");
+
+dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("over"); });
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("over"));
+dropZone.addEventListener("drop", e => {
+  e.preventDefault();
+  dropZone.classList.remove("over");
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+fileInput.addEventListener("change", () => {
+  if (fileInput.files[0]) processFile(fileInput.files[0]);
+  fileInput.value = "";
+});
+
+function processFile(file) {
+  setError("");
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: "array", cellDates: true });
+
+      const sheetName = wb.SheetNames.find(n => n.toLowerCase() === "in");
+      if (!sheetName) {
+        setError(`No "in" sheet found. Available sheets: ${wb.SheetNames.join(", ")}`);
+        return;
+      }
+
+      const raw = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {
+        header: 1, raw: true, cellDates: true, defval: null
+      });
+
+      if (raw.length < 2) { setError("Sheet appears empty."); return; }
+
+      // Map header names → column indices (first occurrence wins)
+      const headerRow = raw[0].map(h => h == null ? "" : String(h).trim());
+      const colIdx = {};
+      WANT_HEADERS.forEach(h => {
+        if (!(h in colIdx)) {
+          const i = headerRow.indexOf(h);
+          if (i !== -1) colIdx[h] = i;
+        }
+      });
+
+      const missing = WANT_HEADERS.filter(h => !(h in colIdx));
+      if (missing.length > 4) {
+        setError(`Unexpected sheet format. Missing columns: ${missing.join(", ")}`);
+        return;
+      }
+
+      const dataRows = raw.slice(1).filter(r => r && r.some(c => c != null));
+      document.getElementById("header-meta").textContent =
+        `${file.name}  |  ${dataRows.length} devices  |  Sheet: ${sheetName}`;
+
+      renderReport(dataRows, colIdx, file.name);
+      showReport();
+    } catch (err) {
+      setError("Failed to read file: " + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function get(row, colIdx, header) {
+  const i = colIdx[header];
+  return i != null ? row[i] : null;
+}
+
+function fmtDate(val) {
+  if (!val) return "";
+  if (val instanceof Date) {
+    if (isNaN(val)) return "";
+    return val.toISOString().slice(0, 10);
+  }
+  const s = String(val);
+  return s === "#N/A" ? "" : s;
+}
+
+function daysAgo(val) {
+  if (!(val instanceof Date) || isNaN(val)) return null;
+  return Math.floor((Date.now() - val.getTime()) / 86400000);
+}
+
+function activeLbl(val) {
+  if (val === true)  return "Yes";
+  if (val === false) return "No";
+  if (val == null || val === "#N/A") return "N/A";
+  const s = String(val).trim().toLowerCase();
+  if (s === "true"  || s === "yes") return "Yes";
+  if (s === "false" || s === "no")  return "No";
+  return "N/A";
+}
+
+function getTech(location) {
+  if (!location) return "";
+  return TECH_MAP[String(location).trim().slice(0, 4)] || "";
+}
+
+function rowCls(ua, da, auditDays, logonDays) {
+  if (ua === false || activeLbl(ua) === "No") return "inactive-user";
+  if (ua == null || ua === "#N/A" || activeLbl(ua) === "N/A") return "unknown-user";
+  if (da === false || activeLbl(da) === "No") return "inactive-device";
+  if ((auditDays != null && auditDays > STALE_DAYS) ||
+      (logonDays  != null && logonDays  > STALE_DAYS)) return "stale";
+  return "";
+}
+
+function esc(s) {
+  return String(s ?? "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+const COLS = [
+  { label: "Asset Name",        key: "Asset Name" },
+  { label: "Type",              key: "CI Type" },
+  { label: "Model",             key: "Product" },
+  { label: "Tech",              derived: true },
+  { label: "Location",          key: "Used By Location" },
+  { label: "Used By Name",      key: "Used By Name" },
+  { label: "Email",             key: "Used By Primary Email" },
+  { label: "Job Title",         key: "Used By Job Title" },
+  { label: "User Active",       key: "Used By Is Active",   bool: true },
+  { label: "Device Active in AD", key: "Device Active in AD", bool: true },
+  { label: "Last Audit Date",   key: "Last Audit Date",     date: true, staleCheck: "audit" },
+  { label: "Last Updated Date", key: "Last Updated Date",   date: true },
+  { label: "AD whenChanged",    key: "AD whenChanged",      date: true },
+  { label: "AD LastLogonDate",  key: "AD LastLogonDate",    date: true, staleCheck: "logon" },
+];
+
+function renderReport(rows, colIdx, filename) {
+  const now = Date.now();
+
+  // Summary counts
+  let inactiveUser = 0, naUser = 0, inactiveDevice = 0, staleCount = 0;
+  rows.forEach(r => {
+    const ua = get(r, colIdx, "Used By Is Active");
+    const da = get(r, colIdx, "Device Active in AD");
+    const auditDays = daysAgo(get(r, colIdx, "Last Audit Date"));
+    const logonDays = daysAgo(get(r, colIdx, "AD LastLogonDate"));
+    const uaLbl = activeLbl(ua);
+    const daLbl = activeLbl(da);
+    if (uaLbl === "No")  inactiveUser++;
+    if (uaLbl === "N/A") naUser++;
+    if (daLbl === "No")  inactiveDevice++;
+    if (uaLbl === "Yes" && daLbl !== "No" &&
+        ((auditDays != null && auditDays > STALE_DAYS) ||
+         (logonDays  != null && logonDays  > STALE_DAYS))) staleCount++;
+  });
+
+  document.getElementById("summary").innerHTML = `
+    <div class="card gray">  <div class="num">${rows.length}</div>  <div class="lbl">Total Devices</div></div>
+    <div class="card red">   <div class="num">${inactiveUser}</div> <div class="lbl">Inactive User</div></div>
+    <div class="card yellow"><div class="num">${naUser}</div>       <div class="lbl">User Unknown / N/A</div></div>
+    <div class="card orange"><div class="num">${inactiveDevice}</div><div class="lbl">Inactive in AD</div></div>
+    <div class="card orange"><div class="num">${staleCount}</div>   <div class="lbl">Stale (&gt;${STALE_DAYS}d)</div></div>
+  `;
+
+  // Table header
+  document.getElementById("thead-row").innerHTML = COLS.map((c, i) =>
+    `<th data-col="${i}">${esc(c.label)}<span class="si"></span></th>`
+  ).join("");
+
+  // Populate location + tech dropdowns
+  const locs = [...new Set(rows.map(r => get(r, colIdx, "Used By Location")).filter(Boolean))].sort();
+  const techs = [...new Set(Object.values(TECH_MAP))].sort();
+  document.getElementById("filter-loc").innerHTML =
+    `<option value="">All Locations</option>` +
+    locs.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join("");
+  document.getElementById("filter-tech").innerHTML =
+    `<option value="">All Techs</option>` +
+    techs.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+
+  // Table body
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = rows.map(r => {
+    const ua         = get(r, colIdx, "Used By Is Active");
+    const da         = get(r, colIdx, "Device Active in AD");
+    const auditVal   = get(r, colIdx, "Last Audit Date");
+    const logonVal   = get(r, colIdx, "AD LastLogonDate");
+    const auditDays  = daysAgo(auditVal);
+    const logonDays  = daysAgo(logonVal);
+    const uaLbl      = activeLbl(ua);
+    const daLbl      = activeLbl(da);
+    const cls        = rowCls(ua, da, auditDays, logonDays);
+    const tech       = getTech(get(r, colIdx, "Used By Location"));
+
+    const cells = COLS.map(c => {
+      if (c.derived) {
+        return `<td class="tech">${esc(tech)}</td>`;
+      }
+      if (c.bool) {
+        const lbl = c.key === "Used By Is Active" ? uaLbl : daLbl;
+        const bcls = lbl === "Yes" ? "yes" : lbl === "No" ? "no" : "na";
+        return `<td class="bool ${bcls}">${lbl}</td>`;
+      }
+      if (c.date) {
+        const val  = get(r, colIdx, c.key);
+        const days = c.staleCheck === "audit" ? auditDays : c.staleCheck === "logon" ? logonDays : null;
+        const stale = days != null && days > STALE_DAYS;
+        return `<td${stale ? ' class="stale-cell"' : ""}>${esc(fmtDate(val))}</td>`;
+      }
+      const val = get(r, colIdx, c.key);
+      return `<td>${esc(val == null || val === "#N/A" ? "" : String(val))}</td>`;
+    });
+
+    return `<tr class="${cls}">${cells.join("")}</tr>`;
+  }).join("\n");
+
+  // Reset filters
+  ["search","filter-type","filter-tech","filter-loc","filter-user","filter-device"]
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (el.tagName === "SELECT") el.value = "";
+      else el.value = "";
+    });
+  document.getElementById("filter-stale").checked = false;
+
+  setupFiltersAndSort();
+  applyFilters();
+}
+
+// ── Filters & sort ────────────────────────────────────────────────────────────
+function setupFiltersAndSort() {
+  const controls = ["search","filter-type","filter-tech","filter-loc",
+                    "filter-user","filter-device","filter-stale"];
+  controls.forEach(id => {
+    const el = document.getElementById(id);
+    const evt = el.type === "checkbox" ? "change" : "input";
+    // Remove old listeners by cloning
+    const clone = el.cloneNode(true);
+    el.parentNode.replaceChild(clone, el);
+    clone.addEventListener(evt, applyFilters);
+  });
+
+  // Sort headers
+  document.querySelectorAll("#tbl th[data-col]").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = parseInt(th.dataset.col);
+      const tbody = document.getElementById("tbody");
+      const allRows = Array.from(tbody.querySelectorAll("tr"));
+      const wasDesc = th.classList.contains("desc");
+      document.querySelectorAll("#tbl th").forEach(h => h.classList.remove("asc","desc"));
+      th.classList.add(wasDesc ? "asc" : "desc");
+      const dir = wasDesc ? 1 : -1;
+      allRows.sort((a, b) => {
+        const av = a.querySelectorAll("td")[col]?.textContent.trim() || "";
+        const bv = b.querySelectorAll("td")[col]?.textContent.trim() || "";
+        return av.localeCompare(bv, undefined, { numeric: true }) * dir;
+      }).forEach(r => tbody.appendChild(r));
+      applyFilters();
+    });
+  });
+}
+
+function applyFilters() {
+  const q      = document.getElementById("search").value.toLowerCase();
+  const type   = document.getElementById("filter-type").value;
+  const tech   = document.getElementById("filter-tech").value;
+  const loc    = document.getElementById("filter-loc").value;
+  const ua     = document.getElementById("filter-user").value;
+  const da     = document.getElementById("filter-device").value;
+  const stOnly = document.getElementById("filter-stale").checked;
+
+  // col indices match COLS array: 0=Asset 1=Type 2=Model 3=Tech 4=Location
+  //   5=Name 6=Email 7=JobTitle 8=UserActive 9=DeviceActive 10=LastAudit ...
+  let vis = 0;
+  document.querySelectorAll("#tbody tr").forEach(row => {
+    const cells = row.querySelectorAll("td");
+    const show =
+      (!q      || row.textContent.toLowerCase().includes(q)) &&
+      (!type   || cells[1]?.textContent.trim() === type) &&
+      (!tech   || cells[3]?.textContent.trim() === tech) &&
+      (!loc    || cells[4]?.textContent.trim() === loc) &&
+      (!ua     || cells[8]?.textContent.trim() === ua) &&
+      (!da     || cells[9]?.textContent.trim() === da) &&
+      (!stOnly || row.className === "stale");
+    row.style.display = show ? "" : "none";
+    if (show) vis++;
+  });
+
+  const total = document.querySelectorAll("#tbody tr").length;
+  document.getElementById("row-count").textContent =
+    `Showing ${vis} of ${total} devices`;
+}
+</script>
+</body>
+</html>
