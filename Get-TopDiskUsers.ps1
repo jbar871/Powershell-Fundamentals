@@ -5,15 +5,23 @@
     .\Get-TopDiskUsers.ps1
     .\Get-TopDiskUsers.ps1 -ProfilesRoot "D:\Users"
     .\Get-TopDiskUsers.ps1 -Username "jsmith"
+    .\Get-TopDiskUsers.ps1 -Path "C:\Users\raking\ARS"
 #>
 [CmdletBinding()]
 param(
     [string]$ProfilesRoot = "C:\Users",
-    [string]$Username
+    [string]$Username,
+    [string]$Path
 )
 
-# Resolve the target profile
-if ($Username) {
+# Resolve the target path — direct path takes priority
+if ($Path) {
+    if (-not (Test-Path $Path)) {
+        Write-Error "Path not found: $Path"
+        exit 1
+    }
+    $profilePath = $Path
+} elseif ($Username) {
     $profilePath = Join-Path $ProfilesRoot $Username
     if (-not (Test-Path $profilePath)) {
         Write-Error "Profile not found: $profilePath"
