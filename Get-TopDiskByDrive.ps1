@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-    Finds the top 10 folders consuming the most disk space across an entire drive.
+    Finds the top N folders consuming the most disk space across an entire drive.
+    Must be run as Administrator for accurate results on C:\.
 .EXAMPLE
     .\Get-TopDiskByDrive.ps1
     .\Get-TopDiskByDrive.ps1 -Drive D
@@ -12,7 +13,14 @@ param(
     [int]$TopN = 10
 )
 
-# If no drive specified, list available drives and prompt
+# Warn if not running as admin — system folders will silently return 0 otherwise
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Warning "Not running as Administrator. Sizes for system folders (Windows, ProgramData, etc.) may show as 0."
+}
+
+# Resolve drive root
 if (-not $Drive) {
     $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Root -match '^[A-Z]:\\$' }
 
@@ -24,8 +32,8 @@ if (-not $Drive) {
     Write-Host "`nAvailable drives:`n" -ForegroundColor Cyan
     for ($i = 0; $i -lt $drives.Count; $i++) {
         $d = $drives[$i]
-        $usedGB  = [math]::Round(($d.Used  / 1GB), 1)
-        $freeGB  = [math]::Round(($d.Free  / 1GB), 1)
+        $usedGB = [math]::Round(($d.Used / 1GB), 1)
+        $freeGB = [math]::Round(($d.Free / 1GB), 1)
         Write-Host ("  [{0}] {1}  Used: {2} GB   Free: {3} GB" -f ($i + 1), $d.Root, $usedGB, $freeGB)
     }
 
@@ -44,47 +52,54 @@ if (-not $Drive) {
     }
 }
 
-Write-Host "`nScanning: $scanRoot  (top $TopN folders by size)`n" -ForegroundColor Cyan
-Write-Host "This may take several minutes on large drives..." -ForegroundColor DarkGray
+Write-Host "`nScanning: $scanRoot  (top $TopN folders by size)" -ForegroundColor Cyan
+Write-Host "Junction points (symlinks) are skipped to avoid double-counting." -ForegroundColor DarkGray
+Write-Host "This may take several minutes on large drives...`n" -ForegroundColor DarkGray
 
-$folders = Get-ChildItem -Path $scanRoot -Directory -ErrorAction SilentlyContinue
+# Get top-level folders, skipping reparse points (junctions/symlinks like "Documents and Settings")
+$folders = Get-ChildItem -Path $scanRoot -Directory -ErrorAction SilentlyContinue |
+    Where-Object { -not ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) }
 
-$results = foreach ($folder in $folders) {
+$results = [System.Collections.Generic.List[PSObject]]::new()
+
+foreach ($folder in $folders) {
     Write-Host "  Calculating: $($folder.FullName)" -ForegroundColor DarkGray
+
+    # Recurse into this folder, skipping any reparse points inside it too
     $size = (Get-ChildItem -Path $folder.FullName -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { -not ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) } |
         Measure-Object -Property Length -Sum).Sum
 
-    [PSCustomObject]@{
+    $results.Add([PSCustomObject]@{
         Path      = $folder.FullName
         SizeBytes = if ($size) { $size } else { 0 }
         SizeGB    = if ($size) { [math]::Round($size / 1GB, 3) } else { 0 }
         SizeMB    = if ($size) { [math]::Round($size / 1MB, 1) } else { 0 }
-    }
+    })
 }
 
-# Also count loose files directly in the root (not in any subfolder)
+# Count loose files directly in the drive root
 $rootFiles = (Get-ChildItem -Path $scanRoot -File -ErrorAction SilentlyContinue |
     Measure-Object -Property Length -Sum).Sum
 if ($rootFiles -gt 0) {
-    $results += [PSCustomObject]@{
-        Path      = "$scanRoot [root files]"
+    $results.Add([PSCustomObject]@{
+        Path      = "$scanRoot[root files]"
         SizeBytes = $rootFiles
         SizeGB    = [math]::Round($rootFiles / 1GB, 3)
         SizeMB    = [math]::Round($rootFiles / 1MB, 1)
-    }
+    })
 }
 
-$topN = $results | Sort-Object SizeBytes -Descending | Select-Object -First $TopN
-
-if ($topN.Count -eq 0) {
+if ($results.Count -eq 0) {
     Write-Warning "No folders found or no access to drive contents."
     exit 0
 }
 
-$totalBytes = ($results | Measure-Object -Property SizeBytes -Sum).Sum
-$topBytes   = ($topN    | Measure-Object -Property SizeBytes -Sum).Sum
+$topN     = $results | Sort-Object SizeBytes -Descending | Select-Object -First $TopN
+$topBytes = ($topN   | Measure-Object -Property SizeBytes -Sum).Sum
+$allBytes = ($results | Measure-Object -Property SizeBytes -Sum).Sum
 
-Write-Host "`nTop $TopN largest folders on ${scanRoot}:`n" -ForegroundColor Green
+Write-Host "`nTop $TopN largest folders on ${scanRoot}`n" -ForegroundColor Green
 Write-Host ("{0,-6} {1,-12} {2}" -f "Rank", "Size", "Path")
 Write-Host ("-" * 75)
 
@@ -103,9 +118,7 @@ foreach ($item in $topN) {
 
 Write-Host ("-" * 75)
 
-$totalDisplay = if ($totalBytes / 1GB -ge 1) { "$([math]::Round($totalBytes / 1GB, 3)) GB" } else { "$([math]::Round($totalBytes / 1MB, 1)) MB" }
-$topDisplay   = if ($topBytes   / 1GB -ge 1) { "$([math]::Round($topBytes   / 1GB, 3)) GB" } else { "$([math]::Round($topBytes   / 1MB, 1)) MB" }
-
-Write-Host ("       {0,-12} Total of top $TopN" -f $topDisplay) -ForegroundColor Yellow
-Write-Host ("       {0,-12} Total scanned (all folders)" -f $totalDisplay) -ForegroundColor DarkGray
+$fmt = { param($b) if ($b / 1GB -ge 1) { "$([math]::Round($b/1GB,3)) GB" } else { "$([math]::Round($b/1MB,1)) MB" } }
+Write-Host ("       {0,-12} Total of top $TopN" -f (& $fmt $topBytes)) -ForegroundColor Yellow
+Write-Host ("       {0,-12} Total scanned" -f (& $fmt $allBytes)) -ForegroundColor DarkGray
 Write-Host ""
